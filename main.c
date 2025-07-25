@@ -423,10 +423,24 @@ void drawLine(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D 
 
 }
 
+void setAndDrawSplinePoints(Spline *spline,RenderTexture2D *preview,Vector2 *mouseInCanvas,Color color){
+    spline->points[2] = (Vector2){mouseInCanvas->x,mouseInCanvas->y};
+    int x1 = spline->points[1].x - 0.25f * (spline->points[2].x -spline->points[1].x);
+    int y1 = spline->points[1].y - 0.25f * (spline->points[2].y -spline->points[1].y);
+    int x2 = spline->points[2].x + 0.25f * (spline->points[2].x -spline->points[1].x);
+    int y2 = spline->points[2].y + 0.25f * (spline->points[2].y -spline->points[1].y);
+    spline->points[0] = (Vector2){x1,y1};
+    spline->points[3] = (Vector2){x2,y2};
+    BeginTextureMode(*preview);
+    ClearBackground(BLANK);
+    DrawSplineCatmullRom(spline->points,spline->max_points,spline->thickness, color);
+    EndTextureMode();
+}
+
 void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview,Vector2 *lastMouse,Vector2 *mouseInCanvas,Color color,Spline *spline){
     if(IsMouseButtonPressed(mouse_button)){
         if(spline->state == IDLE){
-            spline->points[0] = (Vector2){mouseInCanvas->x,mouseInCanvas->y};
+            spline->points[1] = (Vector2){mouseInCanvas->x,mouseInCanvas->y};
             spline->state = MAKING_LINE;
         }
         else if(spline->state == BENDING){
@@ -435,7 +449,10 @@ void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2
         
     }
     else if(IsMouseButtonDown(mouse_button)){
-        if(spline->state == BENDING){
+        if(spline->state == MAKING_LINE){
+            setAndDrawSplinePoints(spline,preview,mouseInCanvas,color);
+        }
+        else if(spline->state == BENDING){
             Vector2 previewPoints[4];
             memcpy(previewPoints, spline->points, sizeof(Vector2) * spline->max_points);    
             Vector2 bend_vector = (Vector2){(mouseInCanvas->x - lastMouse->x) * 5,(mouseInCanvas->y - lastMouse->y) * 5};
@@ -449,17 +466,7 @@ void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2
     else if(IsMouseButtonReleased(mouse_button))
     {
         if(spline->state == MAKING_LINE){
-            spline->points[3] = (Vector2){mouseInCanvas->x,mouseInCanvas->y};
-            int x1 = spline->points[0].x + 0.25f * (spline->points[3].x -spline->points[0].x);
-            int y1 = spline->points[0].y + 0.25f * (spline->points[3].y -spline->points[0].y);
-            int x2 = spline->points[0].x + 0.75f * (spline->points[3].x -spline->points[0].x);
-            int y2 = spline->points[0].y + 0.75f * (spline->points[3].y -spline->points[0].y);
-            spline->points[1] = (Vector2){x1,y1};
-            spline->points[2] = (Vector2){x2,y2};
-            BeginTextureMode(*preview);
-            ClearBackground(BLANK);
-            DrawSplineCatmullRom(spline->points,spline->max_points,spline->thickness, color);
-            EndTextureMode();
+            setAndDrawSplinePoints(spline,preview,mouseInCanvas,color);
             spline->state = BENDING; 
         }
         else if(spline->state == BENDING){
@@ -684,6 +691,7 @@ void DrawAirbrush(RenderTexture2D *canvas, Vector2 mousePos, Color color, int ra
     }
 
     EndTextureMode();
+
 }
 
 // TEXT FUNCTIONS
@@ -964,6 +972,7 @@ int main(void)
                 break;
             case CURVE:
                 drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline);
+                drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline);
                 break;
             case RECTANGLE:
                 drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec);
