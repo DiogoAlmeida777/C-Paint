@@ -9,6 +9,8 @@
 
 #define MAX_COLORS_COUNT 42
 #define MAX_TOOLS_COUNT 12
+#define MAX_BRUSH_MODES_COUNT 2
+
 
 // ENUMS
 
@@ -28,8 +30,8 @@ typedef enum {
 } Tools;
 
 typedef enum {
-    ROUND,
-    SQUARE
+    ROUND = 0,
+    SQUARE = 1,
 } BrushMode;
 
 typedef enum{
@@ -41,17 +43,18 @@ typedef enum{
 // STRUCTS
 
 typedef struct S_Brush {
-    int size;
+    float size;
     BrushMode mode;
+    int brushModeIndex;
 } Brush;
 
 typedef struct S_AirBrush{
-    int radius;
+    float radius;
     float spray_rate;
 } AirBrush;
 
 typedef struct S_Shape {
-    int outline_size;
+    float outline_size;
     bool has_outline;
     bool is_filled;
 } Shape;
@@ -88,6 +91,8 @@ typedef struct S_Spline{
 
 typedef void (*drawFunc)(Vector2*,Vector2*,Color,Color,Shape);
 
+typedef void (*GUIFunc)(void *);
+
 // CONSTRUCTORS
 
 Brush *brush(int size, BrushMode mode)
@@ -96,6 +101,7 @@ Brush *brush(int size, BrushMode mode)
     brush = malloc(sizeof(Brush));
     brush->size = size;
     brush->mode = mode;
+    brush->brushModeIndex = (int)mode;
     return brush;
 }
 
@@ -343,10 +349,12 @@ void drawRec(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color 
     Vector2 topleft = getTopLeft(lastMouse,mouseInCanvas);
     Rectangle rec = {topleft.x,topleft.y,abs(mouseInCanvas->x-lastMouse->x),abs(mouseInCanvas->y - lastMouse->y)};
 
-    if(recInfo.has_outline)
-        DrawRectangleLinesEx(rec,recInfo.outline_size,outline_color);
     if(recInfo.is_filled)
         DrawRectangleRec(rec,fill_color);
+    if(recInfo.has_outline)
+        DrawRectangleLinesEx(rec,recInfo.outline_size,outline_color);
+
+
 }
 
 void drawOval(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color outline_color, Shape ovalInfo)
@@ -759,6 +767,42 @@ void DrawTextToScreen(RenderTexture2D *target,Text *text, Color color){
 }
 
 
+//GUI FUNCTIONS
+
+void brushSettingsGUI(void *tool){
+    Brush *brush = (Brush *)tool;
+    DrawRectangle(GetScreenWidth() - 210,GetScreenHeight() - 95,200,70,(Color){230, 230, 230, 255});
+    DrawRectangleLines(GetScreenWidth() - 210,GetScreenHeight() - 95,200,70,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 50, 120, 15 }, "Size", TextFormat("%.2f", brush->size),&brush->size, 1, 248);
+    const char *brushModeToggles = "CIRCLE;SQUARE"; 
+    GuiComboBox((Rectangle){GetScreenWidth() - 195,GetScreenHeight() - 80, 170, 15 },brushModeToggles,&brush->brushModeIndex);
+    brush->mode = (BrushMode)brush->brushModeIndex;
+}
+
+void airBrushSettingsGUI(void *tool){
+    AirBrush *airbrush = (AirBrush *)tool;
+    DrawRectangle(GetScreenWidth() - 240,GetScreenHeight() - 95,235,70,(Color){230, 230, 230, 255});
+    DrawRectangleLines(GetScreenWidth() - 240,GetScreenHeight() - 95,235,70,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 80, 120, 15 }, "Radius", TextFormat("%.2f", airbrush->radius),&airbrush->radius, 1, 248);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 50, 120, 15 }, "Spray Rate", TextFormat("%.0f", airbrush->spray_rate),&airbrush->spray_rate, 1000,20000);
+}
+
+void textSettingsGUI(void *tool)
+{
+    Text *text = (Text *)tool;
+    DrawRectangle(GetScreenWidth() - 240,GetScreenHeight() - 60,235,35,(Color){230, 230, 230, 255});
+    DrawRectangleLines(GetScreenWidth() - 240,GetScreenHeight() - 60,235,35,GRAY);
+    GuiSpinner((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 50, 150, 20}, "Font Size ",&text->font_size,5,1000,true);
+}
+
+void shapeSettingsGUI(void *tool){
+    Shape *shape = (Shape *)tool;
+    DrawRectangle(GetScreenWidth() - 220,GetScreenHeight() - 120,215,95,(Color){230, 230, 230, 255});
+    DrawRectangleLines(GetScreenWidth() - 220,GetScreenHeight() - 120,215,95,GRAY);
+    GuiCheckBox((Rectangle){ GetScreenWidth() - 210,GetScreenHeight() - 110, 20, 20},"Outline",&shape->has_outline);
+    GuiCheckBox((Rectangle){ GetScreenWidth() - 210,GetScreenHeight() - 80, 20, 20},"Fill",&shape->is_filled);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 145,GetScreenHeight() - 50, 110, 20},"Outline Size",TextFormat("%.0f", shape->outline_size),&shape->outline_size,1,124);  
+}
 
 //MAIN
 
@@ -841,8 +885,39 @@ int main(void)
     Polygon *currentPoly = polygon(1,true,true);
     Spline *currentSpline = spline(4,5);
 
+    void *tools[MAX_TOOLS_COUNT] = {
+        [BRUSH] = currentBrush,
+        [ERASER] = currentEraser,
+        [AIR_BRUSH] = currentAirBrush,
+        [COLOR_BUCKET] = NULL,
+        [COLOR_PICKER] = NULL,
+        [TEXT_BOX] = currentText,
+        [MAGNIFIER] = NULL,
+        [LINE] = NULL,
+        [CURVE] = NULL,
+        [RECTANGLE] = currentRec,
+        [OVAL] = currentOval,
+        [POLYGON] = currentPoly
+    };
 
-    int lineSize = 5;
+    GUIFunc GUISettingFunctions[MAX_TOOLS_COUNT];
+    GUISettingFunctions[BRUSH] =  brushSettingsGUI;
+    GUISettingFunctions[ERASER] = brushSettingsGUI;
+    GUISettingFunctions[AIR_BRUSH] = airBrushSettingsGUI;
+    GUISettingFunctions[COLOR_BUCKET] = NULL;
+    GUISettingFunctions[COLOR_PICKER] = NULL;
+    GUISettingFunctions[TEXT_BOX] = textSettingsGUI;
+    GUISettingFunctions[MAGNIFIER] = NULL;
+    GUISettingFunctions[LINE] = NULL;
+    GUISettingFunctions[CURVE] = NULL;
+    GUISettingFunctions[RECTANGLE] = shapeSettingsGUI;
+    GUISettingFunctions[OVAL] = shapeSettingsGUI;
+    GUISettingFunctions[POLYGON] = shapeSettingsGUI;
+
+
+    void *currentToolPtr = currentBrush;
+
+    float lineSize = 5;
 
     Vector2 lastMouse = { -1, -1 };
 
@@ -1027,7 +1102,10 @@ int main(void)
         {
             char str[10];
             sprintf(str, "#%d#",iconCodes[i]);
-            if(GuiButton(toolSquares[i],str)) currentTool = i;
+            if(GuiButton(toolSquares[i],str)){
+                currentTool = i;
+                currentToolPtr = tools[i];
+            } 
         }
 
         GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
@@ -1042,8 +1120,20 @@ int main(void)
         GuiLabel((Rectangle){10,GetScreenHeight() - 15,10,10},TextFormat("#%d#",ICON_CURSOR_POINTER));
         DrawTextEx(GetFontDefault(), TextFormat("%d, %d px",(int)mouseInCanvas.x,(int)mouseInCanvas.y),(Vector2){40,GetScreenHeight() - 15},10, 2,DARKGRAY);
 
+
+        if (GUISettingFunctions[currentTool]){
+            GUISettingFunctions[currentTool](currentToolPtr);
+        }
+
+        //brushSettingsGUI(currentBrush);
+        //airBrushSettingsGUI(currentAirBrush);
+        //textSettingsGUI(currentText);
+        //shapeSettingsGUI(currentRec);
+
+
+
         EndDrawing();
-        printf("%d\n",GetFPS());
+        //printf("%d\n",GetFPS());
     }
     freeBrush(currentBrush);
     freeBrush(currentEraser);
