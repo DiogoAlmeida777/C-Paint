@@ -874,6 +874,9 @@ int main(void)
 
     Color primaryColor =BLACK;
     Color secondaryColor = WHITE;
+    Color *changedColor = NULL;
+
+    bool colorPickerOpen = false;
 
     // TOOLS
     Brush *currentBrush = brush(5,ROUND);
@@ -925,9 +928,11 @@ int main(void)
 
     float dotAccumulator = 0.0f;
 
+    int currentGesture = GESTURE_NONE;
+
     while (!WindowShouldClose())
     {
-        
+        currentGesture = GetGestureDetected();
         // printf("%d\n",currentBrush->size);
         Vector2 mouse = GetMousePosition();
         Vector2 mouseInCanvas = {
@@ -939,13 +944,20 @@ int main(void)
         {
             if (CheckCollisionPointRec(mouse,colorSquares[i]))
             {
-                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ColorIsEqual(colors[i],BLANK))
                     primaryColor = colors[i];
                 
-                if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+                if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !ColorIsEqual(colors[i],BLANK))
                     secondaryColor = colors[i];
+                
+                if(currentGesture == GESTURE_DOUBLETAP){
+                    changedColor = &colors[i];
+                    colorPickerOpen = true;
+                }
             }
         }
+
+
 
         int increment = GetMouseWheelMove();
 
@@ -1125,15 +1137,19 @@ int main(void)
             GUISettingFunctions[currentTool](currentToolPtr);
         }
 
-        //brushSettingsGUI(currentBrush);
-        //airBrushSettingsGUI(currentAirBrush);
-        //textSettingsGUI(currentText);
-        //shapeSettingsGUI(currentRec);
-
+        if(colorPickerOpen){
+            if(GuiWindowBox((Rectangle){GetScreenWidth()/2 - 150,GetScreenHeight()/2 - 150,300,300},"Change Color")){
+                colorPickerOpen = false;
+            };
+            GuiColorPicker((Rectangle){GetScreenWidth()/2 - 125,GetScreenHeight()/2 - 100,225,225},NULL,changedColor);
+            changedColor->a = 255;
+        }
 
 
         EndDrawing();
         //printf("%d\n",GetFPS());
+        
+
     }
     freeBrush(currentBrush);
     freeBrush(currentEraser);
