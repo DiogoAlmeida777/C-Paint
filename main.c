@@ -804,6 +804,29 @@ void shapeSettingsGUI(void *tool){
     GuiSliderBar((Rectangle){ GetScreenWidth() - 145,GetScreenHeight() - 50, 110, 20},"Outline Size",TextFormat("%.0f", shape->outline_size),&shape->outline_size,1,124);  
 }
 
+
+void resizeCanvas(RenderTexture2D *canvas,RenderTexture2D *preview,int widthIncrement, int heightIncrement, Color backgroundColor){
+    int newWidth = canvas->texture.width + widthIncrement;
+    int newHeight = canvas->texture.height + heightIncrement;
+    newWidth = newWidth < 0 ? 0 : newWidth;
+    newHeight = newHeight < 0 ? 0 : newHeight;
+    RenderTexture2D newCanvas = LoadRenderTexture(newWidth,newHeight);
+    RenderTexture2D newPreview = LoadRenderTexture(newWidth,newHeight);
+    BeginTextureMode(newCanvas);
+        ClearBackground(backgroundColor);
+        Rectangle source = {0,0,canvas->texture.width,-canvas->texture.height};
+        Vector2 position = {0,0};
+        DrawTextureRec(canvas->texture,source,position,WHITE);
+    EndTextureMode();
+    BeginTextureMode(newPreview);
+        ClearBackground(BLANK);
+    EndTextureMode();
+    UnloadRenderTexture(*canvas);
+    *canvas = newCanvas;
+    UnloadRenderTexture(*preview);
+    *preview = newPreview;
+}
+
 //MAIN
 
 int main(void)
@@ -811,12 +834,12 @@ int main(void)
     const int screenWidth = 800;
     const int screenHeight = 600;
     
-    const int canvasWidth = 1920;
-    const int canvasHeight = 1080;
+    int canvasWidth = 1920;
+    int canvasHeight = 1080;
 
     InitWindow(screenWidth, screenHeight, "C-Paint");
     SetWindowState(FLAG_WINDOW_RESIZABLE);
-    SetWindowMinSize(110 + 20 * 14 + 5 * 14,130);
+    SetWindowMinSize(460,460);
     
     Color colors[MAX_COLORS_COUNT] = {
         BLACK, DARKGRAY, GRAY, MAROON, RED, ORANGE, GOLD, YELLOW, GREEN, LIME, DARKGREEN, SKYBLUE, BLUE, DARKBLUE,
@@ -869,6 +892,9 @@ int main(void)
         ClearBackground(BLANK);  
     EndTextureMode();
 
+    Rectangle resizeSquare = (Rectangle){canvasPos.x +canvasWidth,canvasPos.y +canvasHeight,5,5};
+    Rectangle resizeHorizontallySquare = (Rectangle){canvasPos.x + canvasWidth,canvasPos.y +canvasHeight/2-2.5,5,5};
+    Rectangle resizeVerticallySquare = (Rectangle){canvasPos.x +canvasWidth/2-2.5,canvasPos.y +canvasHeight,5,5};
 
     int currentTool = BRUSH;
 
@@ -915,7 +941,7 @@ int main(void)
     GUISettingFunctions[CURVE] = NULL;
     GUISettingFunctions[RECTANGLE] = shapeSettingsGUI;
     GUISettingFunctions[OVAL] = shapeSettingsGUI;
-    GUISettingFunctions[POLYGON] = shapeSettingsGUI;
+    GUISettingFunctions[POLYGON] = NULL;
 
 
     void *currentToolPtr = currentBrush;
@@ -930,15 +956,29 @@ int main(void)
 
     int currentGesture = GESTURE_NONE;
 
+    bool isMouseOverCanvas = false;
+
+    bool resizingCanvas = false;
+    bool resizingWidth = false;
+    bool resizingHeight = false;
+
+    int widthIncrement = 0;
+    int heightIncrement = 0;
+
     while (!WindowShouldClose())
     {
-        currentGesture = GetGestureDetected();
+        currentGesture = GetGestureDetected();     
         // printf("%d\n",currentBrush->size);
         Vector2 mouse = GetMousePosition();
         Vector2 mouseInCanvas = {
             mouse.x - canvasPos.x,
             mouse.y - canvasPos.y
         };
+
+        if(isInsideBounds(canvas.texture.width,canvas.texture.height,mouseInCanvas.x,mouseInCanvas.y) && !colorPickerOpen && !resizingCanvas)
+            isMouseOverCanvas = true;
+        else
+            isMouseOverCanvas = false;
 
         for (int i = 0; i < MAX_COLORS_COUNT; i++)
         {
@@ -957,129 +997,174 @@ int main(void)
             }
         }
 
+        if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+            if(CheckCollisionPointRec(mouse,resizeSquare)){
+                resizingCanvas = true;
+                resizingWidth = true;
+                resizingHeight = true;
 
+            }
+            else if(CheckCollisionPointRec(mouse,resizeHorizontallySquare)){
+                resizingCanvas = true;
+                resizingWidth = true;
+            }
+            else if(CheckCollisionPointRec(mouse,resizeVerticallySquare)){
+                resizingCanvas = true;
+                resizingHeight = true;
+            }
+        }
+
+        if(resizingCanvas){
+            if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
+                if(resizingWidth){
+                    widthIncrement = mouseInCanvas.x - canvas.texture.width; 
+                }
+                if(resizingHeight){
+                    heightIncrement = mouseInCanvas.y - canvas.texture.height; 
+                }
+            }
+            if(IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
+                resizeCanvas(&canvas,&preview,widthIncrement,heightIncrement,backgroundColor);
+                canvasWidth = canvas.texture.width;
+                canvasHeight = canvas.texture.height;
+                if(resizingWidth){
+                    resizeHorizontallySquare.x = resizeSquare.x = canvasPos.x + canvasWidth;
+                    resizeVerticallySquare.x =  canvasPos.x + (canvasWidth/2 - 2.5);
+                }
+                if(resizingHeight){
+                    resizeVerticallySquare.y = resizeSquare.y = canvasPos.y + canvasHeight;
+                    resizeHorizontallySquare.y = canvasPos.y + (canvasHeight/2 - 2.5);
+                }
+                resizingCanvas = false;
+                resizingWidth = false;
+                resizingHeight = false;
+                widthIncrement = 0;
+                heightIncrement = 0;
+            }
+        }
 
         int increment = GetMouseWheelMove();
-
-        switch (currentTool)
-        {
-            case BRUSH:
-                if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
-                {
-                    paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,primaryColor);
-                }
-                else if(IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
-                {  
-                    paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,secondaryColor);
-                }
-                else{
-                    lastMouse.x = -1;
-                    lastMouse.y = -1;
-                }
-
-                if(increment != 0)
-                {
-                    currentBrush->size = changeSize(currentBrush->size, increment);
-                }
-                break;
-            case ERASER:
-                if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
-                {
-                    paint(&canvas,&mouseInCanvas,&lastMouse,currentEraser,backgroundColor);
-                }
-                else{
-                    lastMouse.x = -1;
-                    lastMouse.y = -1;
-                }
-
-                if(increment != 0)
-                {
-                    currentEraser->size = changeSize(currentEraser->size, increment);
-                }
-                break;
-            case COLOR_BUCKET:
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
-                    fill(&canvas,mouseInCanvas,primaryColor);
-                }
-                else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
-                    fill(&canvas,mouseInCanvas,secondaryColor);
-                }
-                break;
-            case COLOR_PICKER:
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
-                    Image canvasImage = LoadImageFromTexture(canvas.texture);
-                    primaryColor = GetImageColor(canvasImage,mouseInCanvas.x,canvasHeight - mouseInCanvas.y - 1);
-                    UnloadImage(canvasImage);
-                }
-                else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
-                    Image canvasImage = LoadImageFromTexture(canvas.texture);
-                    secondaryColor = GetImageColor(canvasImage,mouseInCanvas.x,canvasHeight - mouseInCanvas.y - 1);
-                    UnloadImage(canvasImage);
-                }
-                break;
-            case AIR_BRUSH:
-                if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
-                    DrawAirbrush(&canvas, mouseInCanvas, primaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
-                }
-                if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
-                    DrawAirbrush(&canvas, mouseInCanvas, secondaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
-                }
-                if(increment != 0)
-                {
-                    currentAirBrush->radius = changeSize(currentAirBrush->radius, increment);
-                }      
-                break;
-            case TEXT_BOX:
-                if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
-                {
-                    currentText->is_writing = !currentText->is_writing;
-                    if(currentText->is_writing == true){
-                        currentText->pos = mouseInCanvas;
+        if(isMouseOverCanvas){
+            switch (currentTool)
+            {
+                case BRUSH:
+                    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+                    {
+                        paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,primaryColor);
+                    }
+                    else if(IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
+                    {  
+                        paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,secondaryColor);
                     }
                     else{
-                        DrawTextToScreen(&canvas,currentText,primaryColor);
-                        createNewTextBuffer(currentText);       
+                        lastMouse.x = -1;
+                        lastMouse.y = -1;
                     }
-                }
-                if(currentText->is_writing)
-                {
-                    UpdateText(currentText);
-                    DrawTextToScreen(&preview,currentText,primaryColor);
-                }
-                break;
-            case MAGNIFIER:
-                break;
-            case LINE:
-                drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize);
-                drawLine(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,lineSize);
-                if(increment != 0)
-                {
-                    lineSize = changeSize(lineSize, increment);
-                }
-                break;
-            case CURVE:
-                drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline);
-                drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline);
-                break;
-            case RECTANGLE:
-                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec);
-                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentRec,drawRec);
-                if(increment != 0)
-                {
-                    currentRec->outline_size = changeSize(currentRec->outline_size, increment);
-                }
-                break;
-            case OVAL:
-                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentOval,drawOval);
-                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentOval,drawOval);
-                break;
-            case POLYGON:
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                    drawPolygon(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,currentPoly);
-                }
-                break;
-            default:
-                break;
+
+                    if(increment != 0)
+                    {
+                        currentBrush->size = changeSize(currentBrush->size, increment);
+                    }
+                    break;
+                case ERASER:
+                    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
+                    {
+                        paint(&canvas,&mouseInCanvas,&lastMouse,currentEraser,backgroundColor);
+                    }
+                    else{
+                        lastMouse.x = -1;
+                        lastMouse.y = -1;
+                    }
+
+                    if(increment != 0)
+                    {
+                        currentEraser->size = changeSize(currentEraser->size, increment);
+                    }
+                    break;
+                case COLOR_BUCKET:
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
+                        fill(&canvas,mouseInCanvas,primaryColor);
+                    }
+                    else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
+                        fill(&canvas,mouseInCanvas,secondaryColor);
+                    }
+                    break;
+                case COLOR_PICKER:
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
+                        Image canvasImage = LoadImageFromTexture(canvas.texture);
+                        primaryColor = GetImageColor(canvasImage,mouseInCanvas.x,canvasHeight - mouseInCanvas.y - 1);
+                        UnloadImage(canvasImage);
+                    }
+                    else if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
+                        Image canvasImage = LoadImageFromTexture(canvas.texture);
+                        secondaryColor = GetImageColor(canvasImage,mouseInCanvas.x,canvasHeight - mouseInCanvas.y - 1);
+                        UnloadImage(canvasImage);
+                    }
+                    break;
+                case AIR_BRUSH:
+                    if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+                        DrawAirbrush(&canvas, mouseInCanvas, primaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
+                    }
+                    if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
+                        DrawAirbrush(&canvas, mouseInCanvas, secondaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
+                    }
+                    if(increment != 0)
+                    {
+                        currentAirBrush->radius = changeSize(currentAirBrush->radius, increment);
+                    }      
+                    break;
+                case TEXT_BOX:
+                    if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
+                    {
+                        currentText->is_writing = !currentText->is_writing;
+                        if(currentText->is_writing == true){
+                            currentText->pos = mouseInCanvas;
+                        }
+                        else{
+                            DrawTextToScreen(&canvas,currentText,primaryColor);
+                            createNewTextBuffer(currentText);       
+                        }
+                    }
+                    if(currentText->is_writing)
+                    {
+                        UpdateText(currentText);
+                        DrawTextToScreen(&preview,currentText,primaryColor);
+                    }
+                    break;
+                case MAGNIFIER:
+                    break;
+                case LINE:
+                    drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize);
+                    drawLine(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,lineSize);
+                    if(increment != 0)
+                    {
+                        lineSize = changeSize(lineSize, increment);
+                    }
+                    break;
+                case CURVE:
+                    drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline);
+                    drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline);
+                    break;
+                case RECTANGLE:
+                    drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec);
+                    drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentRec,drawRec);
+                    if(increment != 0)
+                    {
+                        currentRec->outline_size = changeSize(currentRec->outline_size, increment);
+                    }
+                    break;
+                case OVAL:
+                    drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentOval,drawOval);
+                    drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentOval,drawOval);
+                    break;
+                case POLYGON:
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                        drawPolygon(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,currentPoly);
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
 
         BeginDrawing();
@@ -1127,6 +1212,17 @@ int main(void)
         DrawTextureRec(canvas.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, canvasPos, WHITE);
         DrawTextureRec(preview.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, canvasPos, WHITE);
 
+
+        DrawRectangleRec(resizeSquare,DARKBLUE);
+        DrawRectangleRec(resizeHorizontallySquare,DARKBLUE);
+        DrawRectangleRec(resizeVerticallySquare,DARKBLUE);
+
+        if(resizingCanvas){
+            int resizeRecWidth = canvasWidth + widthIncrement < 0 ? 0 : canvasWidth + widthIncrement;
+            int resizeRecHeight = canvasHeight + heightIncrement < 0 ? 0 : canvasHeight + heightIncrement;
+            DrawRectangleLines(canvasPos.x,canvasPos.y,resizeRecWidth,resizeRecHeight,DARKBLUE);
+        }
+
         DrawRectangle(0,GetScreenHeight() - 20,GetScreenWidth(),20,LIGHTGRAY);
         DrawLine(0,GetScreenHeight() - 20,GetScreenWidth(),GetScreenHeight() - 20, DARKGRAY);
         GuiLabel((Rectangle){10,GetScreenHeight() - 15,10,10},TextFormat("#%d#",ICON_CURSOR_POINTER));
@@ -1160,6 +1256,7 @@ int main(void)
     freePolygon(currentPoly);
     freeSpline(currentSpline);
     UnloadRenderTexture(canvas);
+    UnloadRenderTexture(preview);
     CloseWindow();
 
     return 0;
