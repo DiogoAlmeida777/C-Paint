@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include "include/raymath.h"
 
 #define MAX_COLORS_COUNT 42
 #define MAX_TOOLS_COUNT 12
@@ -827,6 +828,13 @@ void resizeCanvas(RenderTexture2D *canvas,RenderTexture2D *preview,int widthIncr
     *preview = newPreview;
 }
 
+void changeResizeSquaresPosition(Rectangle *resizeSquare, Rectangle *resizeHSquare, Rectangle *resizeVSquare, Vector2 canvasPos, int canvasWidth, int canvasHeight, float cameraZoom){
+    resizeHSquare->x = resizeSquare->x = canvasPos.x + canvasWidth * cameraZoom;
+    resizeVSquare->x =  canvasPos.x + (canvasWidth/2 - 2.5) * cameraZoom;
+    resizeVSquare->y = resizeSquare->y = canvasPos.y + canvasHeight* cameraZoom;
+    resizeHSquare->y = canvasPos.y + (canvasHeight/2 - 2.5)* cameraZoom;
+}
+
 //MAIN
 
 int main(void)
@@ -965,15 +973,18 @@ int main(void)
     int widthIncrement = 0;
     int heightIncrement = 0;
 
+    Camera2D camera = {0};
+    camera.zoom = 1.0f;
+    camera.offset = canvasPos;
+    camera.target = (Vector2){0,0};
+    float zoom_percentage = camera.zoom * 100;
+
     while (!WindowShouldClose())
     {
         currentGesture = GetGestureDetected();     
         // printf("%d\n",currentBrush->size);
         Vector2 mouse = GetMousePosition();
-        Vector2 mouseInCanvas = {
-            mouse.x - canvasPos.x,
-            mouse.y - canvasPos.y
-        };
+        Vector2 mouseInCanvas = GetScreenToWorld2D(GetMousePosition(), camera);
 
         if(isInsideBounds(canvas.texture.width,canvas.texture.height,mouseInCanvas.x,mouseInCanvas.y) && !colorPickerOpen && !resizingCanvas)
             isMouseOverCanvas = true;
@@ -1027,14 +1038,7 @@ int main(void)
                 resizeCanvas(&canvas,&preview,widthIncrement,heightIncrement,backgroundColor);
                 canvasWidth = canvas.texture.width;
                 canvasHeight = canvas.texture.height;
-                if(resizingWidth){
-                    resizeHorizontallySquare.x = resizeSquare.x = canvasPos.x + canvasWidth;
-                    resizeVerticallySquare.x =  canvasPos.x + (canvasWidth/2 - 2.5);
-                }
-                if(resizingHeight){
-                    resizeVerticallySquare.y = resizeSquare.y = canvasPos.y + canvasHeight;
-                    resizeHorizontallySquare.y = canvasPos.y + (canvasHeight/2 - 2.5);
-                }
+                changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
                 resizingCanvas = false;
                 resizingWidth = false;
                 resizingHeight = false;
@@ -1132,6 +1136,29 @@ int main(void)
                     }
                     break;
                 case MAGNIFIER:
+                    if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+
+                        zoom_percentage += 10;
+                        if (zoom_percentage > 800){
+                            zoom_percentage = 800;
+                        }
+                        camera.zoom = zoom_percentage/100;
+                        changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
+                    }
+                    else if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
+                        zoom_percentage -= 10;
+                        if (zoom_percentage < 10){
+                            zoom_percentage = 10;
+                        }
+                        camera.zoom = zoom_percentage/100;
+                        changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
+                    }
+                    if(increment != 0){
+                        float scale = 5 * increment;
+                        zoom_percentage = Clamp(zoom_percentage + scale, 10, 800);
+                        camera.zoom = zoom_percentage/100;
+                        changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
+                    }
                     break;
                 case LINE:
                     drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize);
@@ -1170,12 +1197,6 @@ int main(void)
         BeginDrawing();
 
         ClearBackground(RAYWHITE);
-            
-        DrawRectangleLinesEx(
-            (Rectangle){ canvasPos.x, canvasPos.y, canvasWidth, canvasHeight },
-            1,
-            DARKGRAY
-        );
 
         DrawRectangle(0, 30, GetScreenWidth(), 90, Fade(LIGHTGRAY, 0.3f));
         DrawRectangle(0,120,100,GetScreenHeight(), Fade(LIGHTGRAY, 0.3f));
@@ -1209,19 +1230,21 @@ int main(void)
         if (GuiLabelButton((Rectangle){10,0,50,30}, "File"));
         // if (GuiButton((Rectangle){0, 0, 160, 30}, "Red Brush")) primaryColor = RED;
 
-        DrawTextureRec(canvas.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, canvasPos, WHITE);
-        DrawTextureRec(preview.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, canvasPos, WHITE);
-
+        BeginMode2D(camera);
+            DrawTextureRec(canvas.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, (Vector2){0,0}, WHITE);
+            DrawTextureRec(preview.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, (Vector2){0,0}, WHITE);
+            if(resizingCanvas){
+                int resizeRecWidth = canvasWidth + widthIncrement < 0 ? 0 : canvasWidth + widthIncrement;
+                int resizeRecHeight = canvasHeight + heightIncrement < 0 ? 0 : canvasHeight + heightIncrement;
+                DrawRectangleLines(0,0,resizeRecWidth,resizeRecHeight,DARKBLUE);
+            }
+        EndMode2D();
 
         DrawRectangleRec(resizeSquare,DARKBLUE);
         DrawRectangleRec(resizeHorizontallySquare,DARKBLUE);
         DrawRectangleRec(resizeVerticallySquare,DARKBLUE);
 
-        if(resizingCanvas){
-            int resizeRecWidth = canvasWidth + widthIncrement < 0 ? 0 : canvasWidth + widthIncrement;
-            int resizeRecHeight = canvasHeight + heightIncrement < 0 ? 0 : canvasHeight + heightIncrement;
-            DrawRectangleLines(canvasPos.x,canvasPos.y,resizeRecWidth,resizeRecHeight,DARKBLUE);
-        }
+
 
         DrawRectangle(0,GetScreenHeight() - 20,GetScreenWidth(),20,LIGHTGRAY);
         DrawLine(0,GetScreenHeight() - 20,GetScreenWidth(),GetScreenHeight() - 20, DARKGRAY);
