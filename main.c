@@ -11,6 +11,11 @@
 #define MAX_COLORS_COUNT 42
 #define MAX_TOOLS_COUNT 12
 #define MAX_BRUSH_MODES_COUNT 2
+#define RESIZE_SQUARE_SIDE_SIZE 5
+
+
+#define MENU_GRAY (Color){225,225,225,255}
+
 
 
 // ENUMS
@@ -772,37 +777,37 @@ void DrawTextToScreen(RenderTexture2D *target,Text *text, Color color){
 
 void brushSettingsGUI(void *tool){
     Brush *brush = (Brush *)tool;
-    DrawRectangle(GetScreenWidth() - 210,GetScreenHeight() - 95,200,70,(Color){230, 230, 230, 255});
-    DrawRectangleLines(GetScreenWidth() - 210,GetScreenHeight() - 95,200,70,GRAY);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 50, 120, 15 }, "Size", TextFormat("%.2f", brush->size),&brush->size, 1, 248);
+    DrawRectangle(GetScreenWidth() - 220,GetScreenHeight() - 105,200,70,MENU_GRAY);
+    DrawRectangleLines(GetScreenWidth() - 220,GetScreenHeight() - 105,200,70,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 120, 15 }, "Size", TextFormat("%.2f", brush->size),&brush->size, 1, 248);
     const char *brushModeToggles = "CIRCLE;SQUARE"; 
-    GuiComboBox((Rectangle){GetScreenWidth() - 195,GetScreenHeight() - 80, 170, 15 },brushModeToggles,&brush->brushModeIndex);
+    GuiComboBox((Rectangle){GetScreenWidth() - 205,GetScreenHeight() - 90, 170, 15 },brushModeToggles,&brush->brushModeIndex);
     brush->mode = (BrushMode)brush->brushModeIndex;
 }
 
 void airBrushSettingsGUI(void *tool){
     AirBrush *airbrush = (AirBrush *)tool;
-    DrawRectangle(GetScreenWidth() - 240,GetScreenHeight() - 95,235,70,(Color){230, 230, 230, 255});
-    DrawRectangleLines(GetScreenWidth() - 240,GetScreenHeight() - 95,235,70,GRAY);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 80, 120, 15 }, "Radius", TextFormat("%.2f", airbrush->radius),&airbrush->radius, 1, 248);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 50, 120, 15 }, "Spray Rate", TextFormat("%.0f", airbrush->spray_rate),&airbrush->spray_rate, 1000,20000);
+    DrawRectangle(GetScreenWidth() - 250,GetScreenHeight() - 105,235,70,MENU_GRAY);
+    DrawRectangleLines(GetScreenWidth() - 250,GetScreenHeight() - 105,235,70,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 90, 120, 15 }, "Radius", TextFormat("%.2f", airbrush->radius),&airbrush->radius, 1, 248);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 120, 15 }, "Spray Rate", TextFormat("%.0f", airbrush->spray_rate),&airbrush->spray_rate, 1000,20000);
 }
 
 void textSettingsGUI(void *tool)
 {
     Text *text = (Text *)tool;
-    DrawRectangle(GetScreenWidth() - 240,GetScreenHeight() - 60,235,35,(Color){230, 230, 230, 255});
-    DrawRectangleLines(GetScreenWidth() - 240,GetScreenHeight() - 60,235,35,GRAY);
-    GuiSpinner((Rectangle){ GetScreenWidth() - 170,GetScreenHeight() - 50, 150, 20}, "Font Size ",&text->font_size,5,1000,true);
+    DrawRectangle(GetScreenWidth() - 250,GetScreenHeight() - 70,235,35,MENU_GRAY);
+    DrawRectangleLines(GetScreenWidth() - 250,GetScreenHeight() - 70,235,35,GRAY);
+    GuiSpinner((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 150, 20}, "Font Size ",&text->font_size,5,1000,true);
 }
 
 void shapeSettingsGUI(void *tool){
     Shape *shape = (Shape *)tool;
-    DrawRectangle(GetScreenWidth() - 220,GetScreenHeight() - 120,215,95,(Color){230, 230, 230, 255});
-    DrawRectangleLines(GetScreenWidth() - 220,GetScreenHeight() - 120,215,95,GRAY);
-    GuiCheckBox((Rectangle){ GetScreenWidth() - 210,GetScreenHeight() - 110, 20, 20},"Outline",&shape->has_outline);
-    GuiCheckBox((Rectangle){ GetScreenWidth() - 210,GetScreenHeight() - 80, 20, 20},"Fill",&shape->is_filled);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 145,GetScreenHeight() - 50, 110, 20},"Outline Size",TextFormat("%.0f", shape->outline_size),&shape->outline_size,1,124);  
+    DrawRectangle(GetScreenWidth() - 230,GetScreenHeight() - 130,215,95,MENU_GRAY);
+    DrawRectangleLines(GetScreenWidth() - 230,GetScreenHeight() - 130,215,95,GRAY);
+    GuiCheckBox((Rectangle){ GetScreenWidth() - 220,GetScreenHeight() - 120, 20, 20},"Outline",&shape->has_outline);
+    GuiCheckBox((Rectangle){ GetScreenWidth() - 220,GetScreenHeight() - 90, 20, 20},"Fill",&shape->is_filled);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 155,GetScreenHeight() - 60, 110, 20},"Outline Size",TextFormat("%.0f", shape->outline_size),&shape->outline_size,1,124);  
 }
 
 
@@ -829,11 +834,21 @@ void resizeCanvas(RenderTexture2D *canvas,RenderTexture2D *preview,int widthIncr
 }
 
 void changeResizeSquaresPosition(Rectangle *resizeSquare, Rectangle *resizeHSquare, Rectangle *resizeVSquare, Vector2 canvasPos, int canvasWidth, int canvasHeight, float cameraZoom){
-    resizeHSquare->x = resizeSquare->x = canvasPos.x + canvasWidth * cameraZoom;
-    resizeVSquare->x =  canvasPos.x + (canvasWidth/2 - 2.5) * cameraZoom;
-    resizeVSquare->y = resizeSquare->y = canvasPos.y + canvasHeight* cameraZoom;
-    resizeHSquare->y = canvasPos.y + (canvasHeight/2 - 2.5)* cameraZoom;
+    resizeHSquare->x = resizeSquare->x = canvasWidth;
+    resizeVSquare->x =  (canvasWidth/2 - RESIZE_SQUARE_SIDE_SIZE/2);
+    resizeVSquare->y = resizeSquare->y = canvasHeight;
+    resizeHSquare->y = (canvasHeight/2 - RESIZE_SQUARE_SIDE_SIZE/2);
 }
+
+void handleResizeSquaresZoom(Rectangle *resizeSquare, Rectangle *resizeHSquare, Rectangle *resizeVSquare,float cameraZoom){
+    resizeHSquare->width = RESIZE_SQUARE_SIDE_SIZE / cameraZoom;
+    resizeHSquare->height =  RESIZE_SQUARE_SIDE_SIZE / cameraZoom;
+    resizeVSquare->width = RESIZE_SQUARE_SIDE_SIZE / cameraZoom;
+    resizeVSquare->height =  RESIZE_SQUARE_SIDE_SIZE / cameraZoom;
+    resizeSquare->width =  RESIZE_SQUARE_SIDE_SIZE / cameraZoom;
+    resizeSquare->height =  RESIZE_SQUARE_SIDE_SIZE / cameraZoom;
+}
+
 
 //MAIN
 
@@ -900,9 +915,9 @@ int main(void)
         ClearBackground(BLANK);  
     EndTextureMode();
 
-    Rectangle resizeSquare = (Rectangle){canvasPos.x +canvasWidth,canvasPos.y +canvasHeight,5,5};
-    Rectangle resizeHorizontallySquare = (Rectangle){canvasPos.x + canvasWidth,canvasPos.y +canvasHeight/2-2.5,5,5};
-    Rectangle resizeVerticallySquare = (Rectangle){canvasPos.x +canvasWidth/2-2.5,canvasPos.y +canvasHeight,5,5};
+    Rectangle resizeSquare = (Rectangle){canvasWidth,canvasHeight,RESIZE_SQUARE_SIDE_SIZE,RESIZE_SQUARE_SIDE_SIZE};
+    Rectangle resizeHorizontallySquare = (Rectangle){canvasWidth,canvasHeight/2-RESIZE_SQUARE_SIDE_SIZE/2,RESIZE_SQUARE_SIDE_SIZE,RESIZE_SQUARE_SIDE_SIZE};
+    Rectangle resizeVerticallySquare = (Rectangle){canvasWidth/2-RESIZE_SQUARE_SIDE_SIZE/2,canvasHeight,RESIZE_SQUARE_SIDE_SIZE,RESIZE_SQUARE_SIDE_SIZE};
 
     int currentTool = BRUSH;
 
@@ -979,8 +994,28 @@ int main(void)
     camera.target = (Vector2){0,0};
     float zoom_percentage = camera.zoom * 100;
 
+    int horizontalScroll = 0;
+    int verticalScroll = 0;
+
+    float visibleWidth;
+    float visibleHeight;
+
+    int horizontalScrollMax;
+    int verticalScrollMax;
+
+
     while (!WindowShouldClose())
     {
+        visibleWidth = GetScreenWidth() / camera.zoom - canvasPos.x - RESIZE_SQUARE_SIDE_SIZE;
+        visibleHeight = GetScreenHeight() / camera.zoom - canvasPos.y - RESIZE_SQUARE_SIDE_SIZE;
+
+        horizontalScrollMax = canvasWidth - (int)visibleWidth + 30;
+        verticalScrollMax = canvasHeight - (int)visibleHeight + 50;
+
+        horizontalScrollMax = (horizontalScrollMax < 0) ? 0 : horizontalScrollMax;
+        verticalScrollMax = (verticalScrollMax < 0) ? 0 : verticalScrollMax;
+
+
         currentGesture = GetGestureDetected();     
         // printf("%d\n",currentBrush->size);
         Vector2 mouse = GetMousePosition();
@@ -1009,17 +1044,17 @@ int main(void)
         }
 
         if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
-            if(CheckCollisionPointRec(mouse,resizeSquare)){
+            if(CheckCollisionPointRec(mouseInCanvas,resizeSquare)){
                 resizingCanvas = true;
                 resizingWidth = true;
                 resizingHeight = true;
 
             }
-            else if(CheckCollisionPointRec(mouse,resizeHorizontallySquare)){
+            else if(CheckCollisionPointRec(mouseInCanvas,resizeHorizontallySquare)){
                 resizingCanvas = true;
                 resizingWidth = true;
             }
-            else if(CheckCollisionPointRec(mouse,resizeVerticallySquare)){
+            else if(CheckCollisionPointRec(mouseInCanvas,resizeVerticallySquare)){
                 resizingCanvas = true;
                 resizingHeight = true;
             }
@@ -1143,7 +1178,7 @@ int main(void)
                             zoom_percentage = 800;
                         }
                         camera.zoom = zoom_percentage/100;
-                        changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
+                        handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
                     }
                     else if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
                         zoom_percentage -= 10;
@@ -1151,13 +1186,13 @@ int main(void)
                             zoom_percentage = 10;
                         }
                         camera.zoom = zoom_percentage/100;
-                        changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
+                        handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
                     }
                     if(increment != 0){
                         float scale = 5 * increment;
                         zoom_percentage = Clamp(zoom_percentage + scale, 10, 800);
                         camera.zoom = zoom_percentage/100;
-                        changeResizeSquaresPosition(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,canvasPos,canvasWidth,canvasHeight,camera.zoom);
+                        handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
                     }
                     break;
                 case LINE:
@@ -1198,11 +1233,29 @@ int main(void)
 
         ClearBackground(RAYWHITE);
 
-        DrawRectangle(0, 30, GetScreenWidth(), 90, Fade(LIGHTGRAY, 0.3f));
-        DrawRectangle(0,120,100,GetScreenHeight(), Fade(LIGHTGRAY, 0.3f));
-        DrawLine(100, 120, GetScreenWidth(), 120, Fade(LIGHTGRAY, 0.8f));
-        DrawLine(100, 120, 100, GetScreenHeight(), Fade(LIGHTGRAY, 0.8f));
-        DrawRectangle(0,0,GetScreenWidth(),30,Fade(LIGHTGRAY,0.8f));
+        BeginMode2D(camera);
+            DrawTextureRec(canvas.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, (Vector2){0,0}, WHITE);
+            DrawTextureRec(preview.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, (Vector2){0,0}, WHITE);
+            if(resizingCanvas){
+                int resizeRecWidth = canvasWidth + widthIncrement < 0 ? 0 : canvasWidth + widthIncrement;
+                int resizeRecHeight = canvasHeight + heightIncrement < 0 ? 0 : canvasHeight + heightIncrement;
+                DrawRectangleLines(0,0,resizeRecWidth,resizeRecHeight,DARKBLUE);
+            }
+
+            DrawRectangleRec(resizeSquare,DARKBLUE);
+            DrawRectangleRec(resizeHorizontallySquare,DARKBLUE);
+            DrawRectangleRec(resizeVerticallySquare,DARKBLUE);
+
+        EndMode2D();
+
+
+
+        
+        DrawRectangle(0, 30, GetScreenWidth(), 90, MENU_GRAY);
+        DrawRectangle(0,120,100,GetScreenHeight(), MENU_GRAY);
+        DrawLine(100, 120, GetScreenWidth(), 120, LIGHTGRAY);
+        DrawLine(100, 120, 100, GetScreenHeight(), LIGHTGRAY);
+        DrawRectangle(0,0,GetScreenWidth(),30,LIGHTGRAY);
         //DrawRectangle(0,GetScreenHeight() - 10,GetScreenWidth(),10,Fade(LIGHTGRAY, 0.3f));
             
         DrawRectangleRec(secondaryColorSquare,secondaryColor);
@@ -1228,23 +1281,6 @@ int main(void)
 
         GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
         if (GuiLabelButton((Rectangle){10,0,50,30}, "File"));
-        // if (GuiButton((Rectangle){0, 0, 160, 30}, "Red Brush")) primaryColor = RED;
-
-        BeginMode2D(camera);
-            DrawTextureRec(canvas.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, (Vector2){0,0}, WHITE);
-            DrawTextureRec(preview.texture, (Rectangle){0,0,canvasWidth,-canvasHeight}, (Vector2){0,0}, WHITE);
-            if(resizingCanvas){
-                int resizeRecWidth = canvasWidth + widthIncrement < 0 ? 0 : canvasWidth + widthIncrement;
-                int resizeRecHeight = canvasHeight + heightIncrement < 0 ? 0 : canvasHeight + heightIncrement;
-                DrawRectangleLines(0,0,resizeRecWidth,resizeRecHeight,DARKBLUE);
-            }
-        EndMode2D();
-
-        DrawRectangleRec(resizeSquare,DARKBLUE);
-        DrawRectangleRec(resizeHorizontallySquare,DARKBLUE);
-        DrawRectangleRec(resizeVerticallySquare,DARKBLUE);
-
-
 
         DrawRectangle(0,GetScreenHeight() - 20,GetScreenWidth(),20,LIGHTGRAY);
         DrawLine(0,GetScreenHeight() - 20,GetScreenWidth(),GetScreenHeight() - 20, DARKGRAY);
@@ -1264,6 +1300,23 @@ int main(void)
             changedColor->a = 255;
         }
 
+        if(visibleWidth < canvasWidth){
+            Rectangle HorizontalScrollBar = {canvasPos.x,GetScreenHeight() - 30,GetScreenWidth() - canvasPos.x - 10,10};
+            horizontalScroll = GuiScrollBar(HorizontalScrollBar,horizontalScroll,0,horizontalScrollMax);
+            camera.target.x = horizontalScroll;
+        }
+        else{
+            camera.target.x = 0;
+        }
+
+        if(visibleHeight < canvasHeight){
+            Rectangle VerticalScrollBar = {GetScreenWidth() - 10, canvasPos.y,10,GetScreenHeight()-canvasPos.y-30};
+            verticalScroll = GuiScrollBar(VerticalScrollBar,verticalScroll,0,verticalScrollMax);
+            camera.target.y = verticalScroll;
+        }
+        else{
+            camera.target.y = 0;
+        }
 
         EndDrawing();
         //printf("%d\n",GetFPS());
