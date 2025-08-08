@@ -72,6 +72,8 @@ typedef struct S_Text{
     int font_size;
     Vector2 pos;
     bool is_writing;
+    int line_count;
+    int last_newline_index;
 } Text;
 
 typedef struct S_Polygon
@@ -81,7 +83,7 @@ typedef struct S_Polygon
     int num_of_vertices;
     int capacity;
     Vector2 *vertices;
-    int outline_size;
+    float outline_size;
     bool has_outline;
     bool is_filled;
 
@@ -90,14 +92,14 @@ typedef struct S_Polygon
 typedef struct S_Spline{
     int max_points;
     Vector2 *points;
-    int thickness;
+    float thickness;
     SplineState state;
     int index;
 } Spline;
 
 typedef void (*drawFunc)(Vector2*,Vector2*,Color,Color,Shape);
 
-typedef void (*GUIFunc)(void *);
+typedef void (*GUIFunc)(void *, Rectangle);
 
 // CONSTRUCTORS
 
@@ -147,6 +149,8 @@ void createNewTextBuffer(Text *text)
     }
     text->buffer[0] = '\0';
     text->text_length = 0;
+    text->line_count = 0;
+    text->last_newline_index = 0;
 }
 
 
@@ -378,12 +382,12 @@ void drawOval(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color
                     
 }
 
-void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color outline_color,Shape shapeInfo, drawFunc draw_func){
-    if(IsMouseButtonPressed(mouse_button))
+void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color outline_color,Shape shapeInfo, drawFunc draw_func, bool isMouseOverCanvas){
+    if(IsMouseButtonPressed(mouse_button) && isMouseOverCanvas)
     {
         *lastMouse = *mouseInCanvas;
     }
-    else if(IsMouseButtonDown(mouse_button))
+    else if(IsMouseButtonDown(mouse_button) && !Vector2Equals(*lastMouse,(Vector2){-1,-1}))
     {
         BeginTextureMode(*preview);
         ClearBackground(BLANK);
@@ -393,7 +397,7 @@ void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D
         }
         EndTextureMode();
     }
-    else if(IsMouseButtonReleased(mouse_button))
+    else if(IsMouseButtonReleased(mouse_button) && !Vector2Equals(*lastMouse,(Vector2){-1,-1}))
     {
         BeginTextureMode(*preview);
         ClearBackground(BLANK);
@@ -410,25 +414,29 @@ void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D
 
 }
 
-void drawLine(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color color,int lineSize){
-    if(IsMouseButtonPressed(mouse_button))
+void drawLine(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color color,int lineSize, bool isMouseOverCanvas){
+    if(IsMouseButtonPressed(mouse_button) && isMouseOverCanvas)
     {
         *lastMouse = *mouseInCanvas;
     }
-    else if(IsMouseButtonDown(mouse_button))
+    else if(IsMouseButtonDown(mouse_button) && !Vector2Equals(*lastMouse,(Vector2){-1,-1}))
     {
         BeginTextureMode(*preview);
         ClearBackground(BLANK);
+        DrawCircle(lastMouse->x,lastMouse->y,lineSize/2,color);
         DrawLineEx(*lastMouse,*mouseInCanvas,lineSize,color);
+        DrawCircle(mouseInCanvas->x,mouseInCanvas->y,lineSize/2,color);
         EndTextureMode();
     }
-    else if(IsMouseButtonReleased(mouse_button))
+    else if(IsMouseButtonReleased(mouse_button) && !Vector2Equals(*lastMouse,(Vector2){-1,-1}))
     {
         BeginTextureMode(*preview);
         ClearBackground(BLANK);
         EndTextureMode();
         BeginTextureMode(*canvas);
+        DrawCircle(lastMouse->x,lastMouse->y,lineSize/2,color);
         DrawLineEx(*lastMouse,*mouseInCanvas,lineSize,color);
+        DrawCircle(mouseInCanvas->x,mouseInCanvas->y,lineSize/2,color);
         EndTextureMode();
         lastMouse->x = -1;
         lastMouse->y = -1;
@@ -451,8 +459,8 @@ void setAndDrawSplinePoints(Spline *spline,RenderTexture2D *preview,Vector2 *mou
     EndTextureMode();
 }
 
-void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview,Vector2 *lastMouse,Vector2 *mouseInCanvas,Color color,Spline *spline){
-    if(IsMouseButtonPressed(mouse_button)){
+void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview,Vector2 *lastMouse,Vector2 *mouseInCanvas,Color color,Spline *spline,bool isMouseOverCanvas){
+    if(IsMouseButtonPressed(mouse_button) && isMouseOverCanvas){
         if(spline->state == IDLE){
             spline->points[1] = (Vector2){mouseInCanvas->x,mouseInCanvas->y};
             spline->state = MAKING_LINE;
@@ -546,18 +554,18 @@ void fillPolygon(Polygon *poly, Color fill_color) {
         qsort(intersections, num_of_intersections, sizeof(Vector2), Comparer);
 
         for (int i = 0; i < num_of_intersections - 1; i += 2) {
-            DrawLineEx(intersections[i], intersections[i + 1], poly->outline_size, fill_color);
+            DrawLineEx(intersections[i], intersections[i + 1], 1, fill_color);
         }
 
         free(intersections);
     }
 }
 
-void drawPolygon(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color outline_color, Color fill_color,Polygon *poly){
+void drawPolygon(RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color outline_color, Color fill_color,Polygon *poly){
     
-    if(poly->num_of_vertices > 0){
+    if(poly->num_of_vertices > 2){
         float dist = distanceBetweenVectors(poly->vertices[0],*mouseInCanvas);
-        if(poly->num_of_vertices > 2 && dist < poly->outline_size + 3.0f){
+        if(dist < poly->outline_size + 3.0f){
 
             BeginTextureMode(*preview);
             ClearBackground(BLANK);
@@ -568,7 +576,14 @@ void drawPolygon(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture
             }
             for(int i = 0; i < poly->num_of_vertices;i++)
             {
-                DrawLineEx(poly->vertices[i],poly->vertices[(i+1)%poly->num_of_vertices],poly->outline_size,outline_color);
+                if(poly->has_outline){
+                    DrawLineEx(poly->vertices[i],poly->vertices[(i+1)%poly->num_of_vertices],poly->outline_size,outline_color);
+                    DrawCircle(poly->vertices[(i+1)%poly->num_of_vertices].x,poly->vertices[(i+1)%poly->num_of_vertices].y,poly->outline_size/2,outline_color);
+                }
+                else{
+                    DrawLineEx(poly->vertices[i],poly->vertices[(i+1)%poly->num_of_vertices],1,fill_color);
+                }
+                
             }
             EndTextureMode();
             createNewVertices(poly);
@@ -581,11 +596,15 @@ void drawPolygon(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture
     if(poly->num_of_vertices > 1)
     {
         BeginTextureMode(*preview);
-        DrawLineEx(poly->vertices[poly->num_of_vertices-2],poly->vertices[poly->num_of_vertices-1],poly->outline_size,outline_color);
+        if(poly->has_outline){
+            DrawLineEx(poly->vertices[poly->num_of_vertices-2],poly->vertices[poly->num_of_vertices-1],poly->outline_size,outline_color);
+            DrawCircle(poly->vertices[poly->num_of_vertices-1].x,poly->vertices[poly->num_of_vertices-1].y,poly->outline_size/2,outline_color);
+        }
+        else{
+            DrawLineEx(poly->vertices[poly->num_of_vertices-2],poly->vertices[poly->num_of_vertices-1],1,fill_color);
+        }
         EndTextureMode();
     }
-
-
 }
 
 
@@ -710,6 +729,17 @@ void DrawAirbrush(RenderTexture2D *canvas, Vector2 mousePos, Color color, int ra
 
 // TEXT FUNCTIONS
 
+void updateNewLineIndex(Text *text) {
+    text->last_newline_index = 0; // Default: start of buffer
+
+    for (int i = text->text_length - 1; i >= 0; i--) {
+        if (text->buffer[i] == '\n') {
+            text->last_newline_index = i+1;
+            break;
+        }
+    }
+}
+
 void addCharToBuffer(Text *text, char new_char)
 {
     if(text->text_length + 2 >=  text->buffer_size)
@@ -727,6 +757,7 @@ void addCharToBuffer(Text *text, char new_char)
     text->buffer[text->text_length] = '\0';
 }
 
+
 void UpdateText(Text *text){
     int char_key = GetCharPressed();
 
@@ -737,10 +768,19 @@ void UpdateText(Text *text){
 
     int key = GetKeyPressed();
     while(key > 0){
-        if(IsKeyPressed(KEY_ENTER))
+        if(IsKeyPressed(KEY_ENTER)){
             addCharToBuffer(text,'\n');
+            text->line_count++;
+            text->last_newline_index = text->text_length;
+        }
+
         if(IsKeyPressed(KEY_BACKSPACE) && text->text_length > 0){
+            char erasedChar = text->buffer[text->text_length-1];
             text->buffer[--text->text_length] = '\0';
+            if(erasedChar == '\n'){
+                text->line_count--;
+                updateNewLineIndex(text);
+            }
         }
         key = GetKeyPressed();
     }
@@ -750,14 +790,13 @@ void UpdateText(Text *text){
 
 void DrawCaret(RenderTexture2D *target,Text *text, Color color)
 {
-    Vector2 caretPos = MeasureTextEx(GetFontDefault(), text->buffer, text->font_size, 2);
+    Vector2 caretPos = MeasureTextEx(GetFontDefault(),&text->buffer[text->last_newline_index], text->font_size, 2.0f);
     caretPos.x += text->pos.x;
-    caretPos.y = text->pos.y;
+    caretPos.y = text->pos.y + text->line_count * text->font_size;
 
     // Blink caret: show it every ~0.5s
     if ((int)(GetTime() * 2) % 2 == 0) {
         DrawLineV(caretPos, (Vector2){caretPos.x, caretPos.y + text->font_size}, color);
-        //DrawText("_", caretPos.x+1, caretPos.y, text->font_size, GRAY);
     }
 }
 
@@ -775,39 +814,62 @@ void DrawTextToScreen(RenderTexture2D *target,Text *text, Color color){
 
 //GUI FUNCTIONS
 
-void brushSettingsGUI(void *tool){
+void brushSettingsGUI(void *tool, Rectangle GUIRec){
     Brush *brush = (Brush *)tool;
-    DrawRectangle(GetScreenWidth() - 220,GetScreenHeight() - 105,200,70,MENU_GRAY);
-    DrawRectangleLines(GetScreenWidth() - 220,GetScreenHeight() - 105,200,70,GRAY);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 120, 15 }, "Size", TextFormat("%.2f", brush->size),&brush->size, 1, 248);
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 130, 15 }, "Size", TextFormat("%.0f", brush->size),&brush->size, 1, 120);
     const char *brushModeToggles = "CIRCLE;SQUARE"; 
     GuiComboBox((Rectangle){GetScreenWidth() - 205,GetScreenHeight() - 90, 170, 15 },brushModeToggles,&brush->brushModeIndex);
     brush->mode = (BrushMode)brush->brushModeIndex;
 }
 
-void airBrushSettingsGUI(void *tool){
+void airBrushSettingsGUI(void *tool, Rectangle GUIRec){
     AirBrush *airbrush = (AirBrush *)tool;
-    DrawRectangle(GetScreenWidth() - 250,GetScreenHeight() - 105,235,70,MENU_GRAY);
-    DrawRectangleLines(GetScreenWidth() - 250,GetScreenHeight() - 105,235,70,GRAY);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 90, 120, 15 }, "Radius", TextFormat("%.2f", airbrush->radius),&airbrush->radius, 1, 248);
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 90, 120, 15 }, "Radius", TextFormat("%.2f", airbrush->radius),&airbrush->radius, 1, 120);
     GuiSliderBar((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 120, 15 }, "Spray Rate", TextFormat("%.0f", airbrush->spray_rate),&airbrush->spray_rate, 1000,20000);
 }
 
-void textSettingsGUI(void *tool)
+void textSettingsGUI(void *tool, Rectangle GUIRec)
 {
     Text *text = (Text *)tool;
-    DrawRectangle(GetScreenWidth() - 250,GetScreenHeight() - 70,235,35,MENU_GRAY);
-    DrawRectangleLines(GetScreenWidth() - 250,GetScreenHeight() - 70,235,35,GRAY);
-    GuiSpinner((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 150, 20}, "Font Size ",&text->font_size,5,1000,true);
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
+    GuiSpinner((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 150, 20}, "Font Size ",&text->font_size,5,1000,false);
 }
 
-void shapeSettingsGUI(void *tool){
+void shapeSettingsGUI(void *tool, Rectangle GUIRec){
     Shape *shape = (Shape *)tool;
-    DrawRectangle(GetScreenWidth() - 230,GetScreenHeight() - 130,215,95,MENU_GRAY);
-    DrawRectangleLines(GetScreenWidth() - 230,GetScreenHeight() - 130,215,95,GRAY);
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
     GuiCheckBox((Rectangle){ GetScreenWidth() - 220,GetScreenHeight() - 120, 20, 20},"Outline",&shape->has_outline);
     GuiCheckBox((Rectangle){ GetScreenWidth() - 220,GetScreenHeight() - 90, 20, 20},"Fill",&shape->is_filled);
-    GuiSliderBar((Rectangle){ GetScreenWidth() - 155,GetScreenHeight() - 60, 110, 20},"Outline Size",TextFormat("%.0f", shape->outline_size),&shape->outline_size,1,124);  
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 155,GetScreenHeight() - 60, 110, 20},"Outline Size",TextFormat("%.0f", shape->outline_size),&shape->outline_size,1,120);  
+}
+
+void polygonSettingsGUI(void *tool, Rectangle GUIRec){
+    Polygon *poly = (Polygon *)tool;
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
+    GuiCheckBox((Rectangle){ GetScreenWidth() - 220,GetScreenHeight() - 120, 20, 20},"Outline",&poly->has_outline);
+    GuiCheckBox((Rectangle){ GetScreenWidth() - 220,GetScreenHeight() - 90, 20, 20},"Fill",&poly->is_filled);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 155,GetScreenHeight() - 60, 110, 20},"Outline Size",TextFormat("%.0f", poly->outline_size),&poly->outline_size,1,120);  
+}
+
+void magnifierSettingsGUI(void *tool, Rectangle GUIRec){
+    float *zoom_percentage = (float *)tool;
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 210,GetScreenHeight() - 60, 150, 20}, "Zoom",TextFormat("%.2fx", (*zoom_percentage)/100),zoom_percentage,10,800);
+}
+
+void lineSettingsGUI(void *tool, Rectangle GUIRec){
+    float *lineSize = (float *)tool;
+    DrawRectangleRec(GUIRec,MENU_GRAY);
+    DrawRectangleLinesEx(GUIRec,1,GRAY);
+    GuiSliderBar((Rectangle){ GetScreenWidth() - 195,GetScreenHeight() - 60, 150, 20}, "Line Size",TextFormat("%.0f", (*lineSize)),lineSize,1,120);
 }
 
 
@@ -937,37 +999,6 @@ int main(void)
     Polygon *currentPoly = polygon(1,true,true);
     Spline *currentSpline = spline(4,5);
 
-    void *tools[MAX_TOOLS_COUNT] = {
-        [BRUSH] = currentBrush,
-        [ERASER] = currentEraser,
-        [AIR_BRUSH] = currentAirBrush,
-        [COLOR_BUCKET] = NULL,
-        [COLOR_PICKER] = NULL,
-        [TEXT_BOX] = currentText,
-        [MAGNIFIER] = NULL,
-        [LINE] = NULL,
-        [CURVE] = NULL,
-        [RECTANGLE] = currentRec,
-        [OVAL] = currentOval,
-        [POLYGON] = currentPoly
-    };
-
-    GUIFunc GUISettingFunctions[MAX_TOOLS_COUNT];
-    GUISettingFunctions[BRUSH] =  brushSettingsGUI;
-    GUISettingFunctions[ERASER] = brushSettingsGUI;
-    GUISettingFunctions[AIR_BRUSH] = airBrushSettingsGUI;
-    GUISettingFunctions[COLOR_BUCKET] = NULL;
-    GUISettingFunctions[COLOR_PICKER] = NULL;
-    GUISettingFunctions[TEXT_BOX] = textSettingsGUI;
-    GUISettingFunctions[MAGNIFIER] = NULL;
-    GUISettingFunctions[LINE] = NULL;
-    GUISettingFunctions[CURVE] = NULL;
-    GUISettingFunctions[RECTANGLE] = shapeSettingsGUI;
-    GUISettingFunctions[OVAL] = shapeSettingsGUI;
-    GUISettingFunctions[POLYGON] = NULL;
-
-
-    void *currentToolPtr = currentBrush;
 
     float lineSize = 5;
 
@@ -1004,10 +1035,42 @@ int main(void)
     int verticalScrollMax;
 
 
+    void *tools[MAX_TOOLS_COUNT] = {
+        [BRUSH] = currentBrush,
+        [ERASER] = currentEraser,
+        [AIR_BRUSH] = currentAirBrush,
+        [COLOR_BUCKET] = NULL,
+        [COLOR_PICKER] = NULL,
+        [TEXT_BOX] = currentText,
+        [MAGNIFIER] = &zoom_percentage,
+        [LINE] = &lineSize,
+        [CURVE] = &currentSpline->thickness,
+        [RECTANGLE] = currentRec,
+        [OVAL] = currentOval,
+        [POLYGON] = currentPoly
+    };
+
+    GUIFunc GUISettingFunctions[MAX_TOOLS_COUNT];
+    GUISettingFunctions[BRUSH] =  brushSettingsGUI;
+    GUISettingFunctions[ERASER] = brushSettingsGUI;
+    GUISettingFunctions[AIR_BRUSH] = airBrushSettingsGUI;
+    GUISettingFunctions[COLOR_BUCKET] = NULL;
+    GUISettingFunctions[COLOR_PICKER] = NULL;
+    GUISettingFunctions[TEXT_BOX] = textSettingsGUI;
+    GUISettingFunctions[MAGNIFIER] = magnifierSettingsGUI;
+    GUISettingFunctions[LINE] = lineSettingsGUI;
+    GUISettingFunctions[CURVE] = lineSettingsGUI;
+    GUISettingFunctions[RECTANGLE] = shapeSettingsGUI;
+    GUISettingFunctions[OVAL] = shapeSettingsGUI;
+    GUISettingFunctions[POLYGON] = polygonSettingsGUI;
+
+
+    void *currentToolPtr = currentBrush;
+
     while (!WindowShouldClose())
     {
-        visibleWidth = GetScreenWidth() / camera.zoom - canvasPos.x - RESIZE_SQUARE_SIDE_SIZE;
-        visibleHeight = GetScreenHeight() / camera.zoom - canvasPos.y - RESIZE_SQUARE_SIDE_SIZE;
+        visibleWidth = GetScreenWidth() / camera.zoom - canvasPos.x - RESIZE_SQUARE_SIDE_SIZE*2;
+        visibleHeight = GetScreenHeight() / camera.zoom - canvasPos.y - RESIZE_SQUARE_SIDE_SIZE*4;
 
         horizontalScrollMax = canvasWidth - (int)visibleWidth + 30;
         verticalScrollMax = canvasHeight - (int)visibleHeight + 50;
@@ -1015,13 +1078,43 @@ int main(void)
         horizontalScrollMax = (horizontalScrollMax < 0) ? 0 : horizontalScrollMax;
         verticalScrollMax = (verticalScrollMax < 0) ? 0 : verticalScrollMax;
 
+        Rectangle menuRec = (Rectangle){0, 0, GetScreenWidth(), 120};
+        Rectangle menuRec2 = (Rectangle){0,120,100,GetScreenHeight()};
+        Rectangle footerRec = (Rectangle){0,GetScreenHeight() - 20,GetScreenWidth(),20};
+        Rectangle HorizontalScrollBar = {canvasPos.x,GetScreenHeight() - 30,GetScreenWidth() - canvasPos.x - 10,10};
+        Rectangle VerticalScrollBar = {GetScreenWidth() - 10, canvasPos.y,10,GetScreenHeight()-canvasPos.y-30};
+
+        Rectangle GUIRecs[MAX_TOOLS_COUNT] = {
+            [BRUSH] = (Rectangle){GetScreenWidth() - 220,GetScreenHeight() - 105,200,70},
+            [ERASER] = (Rectangle){GetScreenWidth() - 220,GetScreenHeight() - 105,200,70},
+            [AIR_BRUSH] = (Rectangle){GetScreenWidth() - 250,GetScreenHeight() - 105,235,70},
+            [COLOR_BUCKET] = (Rectangle){0},
+            [COLOR_PICKER] = (Rectangle){0},
+            [TEXT_BOX] = (Rectangle){GetScreenWidth() - 250,GetScreenHeight() - 70,235,35},
+            [MAGNIFIER] = (Rectangle){GetScreenWidth() - 250,GetScreenHeight() - 70,235,35},
+            [LINE] = (Rectangle){GetScreenWidth() - 250,GetScreenHeight() - 70,235,35},
+            [CURVE] = (Rectangle){GetScreenWidth() - 250,GetScreenHeight() - 70,235,35},
+            [RECTANGLE] = (Rectangle){GetScreenWidth() - 230,GetScreenHeight() - 130,215,95},
+            [OVAL] = (Rectangle){GetScreenWidth() - 230,GetScreenHeight() - 130,215,95},
+            [POLYGON] = (Rectangle){GetScreenWidth() - 230,GetScreenHeight() - 130,215,95},
+        };
 
         currentGesture = GetGestureDetected();     
         // printf("%d\n",currentBrush->size);
         Vector2 mouse = GetMousePosition();
         Vector2 mouseInCanvas = GetScreenToWorld2D(GetMousePosition(), camera);
 
-        if(isInsideBounds(canvas.texture.width,canvas.texture.height,mouseInCanvas.x,mouseInCanvas.y) && !colorPickerOpen && !resizingCanvas)
+        if(
+            isInsideBounds(canvas.texture.width,canvas.texture.height,mouseInCanvas.x,mouseInCanvas.y) 
+            && !CheckCollisionPointRec(mouse,menuRec) 
+            && !CheckCollisionPointRec(mouse,menuRec2)
+            && !CheckCollisionPointRec(mouse,footerRec)
+            && !(visibleWidth < canvasWidth && CheckCollisionPointRec(mouse,HorizontalScrollBar))
+            && !(visibleHeight < canvasHeight && CheckCollisionPointRec(mouse,VerticalScrollBar))
+            && !CheckCollisionPointRec(mouse,GUIRecs[currentTool])
+            && !colorPickerOpen 
+            && !resizingCanvas
+        )
             isMouseOverCanvas = true;
         else
             isMouseOverCanvas = false;
@@ -1083,15 +1176,15 @@ int main(void)
         }
 
         int increment = GetMouseWheelMove();
-        if(isMouseOverCanvas){
-            switch (currentTool)
-            {
-                case BRUSH:
+        switch (currentTool)
+        {
+            case BRUSH:
+                if(isMouseOverCanvas){
                     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
                     {
                         paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,primaryColor);
                     }
-                    else if(IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
+                    else if(IsMouseButtonDown(MOUSE_RIGHT_BUTTON) )
                     {  
                         paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,secondaryColor);
                     }
@@ -1099,13 +1192,14 @@ int main(void)
                         lastMouse.x = -1;
                         lastMouse.y = -1;
                     }
-
-                    if(increment != 0)
-                    {
-                        currentBrush->size = changeSize(currentBrush->size, increment);
-                    }
-                    break;
-                case ERASER:
+                }
+                if(increment != 0)
+                {
+                    currentBrush->size = changeSize(currentBrush->size, increment);
+                }
+                break;
+            case ERASER:
+                if(isMouseOverCanvas){
                     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsMouseButtonDown(MOUSE_RIGHT_BUTTON))
                     {
                         paint(&canvas,&mouseInCanvas,&lastMouse,currentEraser,backgroundColor);
@@ -1114,21 +1208,22 @@ int main(void)
                         lastMouse.x = -1;
                         lastMouse.y = -1;
                     }
-
-                    if(increment != 0)
-                    {
-                        currentEraser->size = changeSize(currentEraser->size, increment);
-                    }
-                    break;
-                case COLOR_BUCKET:
-                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
-                        fill(&canvas,mouseInCanvas,primaryColor);
-                    }
-                    else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
-                        fill(&canvas,mouseInCanvas,secondaryColor);
-                    }
-                    break;
-                case COLOR_PICKER:
+                }
+                if(increment != 0)
+                {
+                    currentEraser->size = changeSize(currentEraser->size, increment);
+                }
+                break;
+            case COLOR_BUCKET:
+                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
+                    fill(&canvas,mouseInCanvas,primaryColor);
+                }
+                else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
+                    fill(&canvas,mouseInCanvas,secondaryColor);
+                }
+                break;
+            case COLOR_PICKER:
+                if(isMouseOverCanvas){
                     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
                         Image canvasImage = LoadImageFromTexture(canvas.texture);
                         primaryColor = GetImageColor(canvasImage,mouseInCanvas.x,canvasHeight - mouseInCanvas.y - 1);
@@ -1139,20 +1234,24 @@ int main(void)
                         secondaryColor = GetImageColor(canvasImage,mouseInCanvas.x,canvasHeight - mouseInCanvas.y - 1);
                         UnloadImage(canvasImage);
                     }
-                    break;
-                case AIR_BRUSH:
+                }
+                break;
+            case AIR_BRUSH:
+                if(isMouseOverCanvas){
                     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
                         DrawAirbrush(&canvas, mouseInCanvas, primaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
                     }
                     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
                         DrawAirbrush(&canvas, mouseInCanvas, secondaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
                     }
-                    if(increment != 0)
-                    {
-                        currentAirBrush->radius = changeSize(currentAirBrush->radius, increment);
-                    }      
-                    break;
-                case TEXT_BOX:
+                }
+                if(increment != 0)
+                {
+                    currentAirBrush->radius = changeSize(currentAirBrush->radius, increment);
+                }      
+                break;
+            case TEXT_BOX:
+                if(isMouseOverCanvas){
                     if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
                     {
                         currentText->is_writing = !currentText->is_writing;
@@ -1164,69 +1263,73 @@ int main(void)
                             createNewTextBuffer(currentText);       
                         }
                     }
-                    if(currentText->is_writing)
-                    {
-                        UpdateText(currentText);
-                        DrawTextToScreen(&preview,currentText,primaryColor);
-                    }
-                    break;
-                case MAGNIFIER:
+                }
+                if(currentText->is_writing)
+                {
+                    UpdateText(currentText);
+                    DrawTextToScreen(&preview,currentText,primaryColor);
+                }
+                break;
+            case MAGNIFIER:
+                if(isMouseOverCanvas){
                     if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
 
                         zoom_percentage += 10;
                         if (zoom_percentage > 800){
                             zoom_percentage = 800;
                         }
-                        camera.zoom = zoom_percentage/100;
-                        handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
                     }
                     else if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
                         zoom_percentage -= 10;
                         if (zoom_percentage < 10){
                             zoom_percentage = 10;
                         }
-                        camera.zoom = zoom_percentage/100;
-                        handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
                     }
-                    if(increment != 0){
-                        float scale = 5 * increment;
-                        zoom_percentage = Clamp(zoom_percentage + scale, 10, 800);
-                        camera.zoom = zoom_percentage/100;
-                        handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
-                    }
-                    break;
-                case LINE:
-                    drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize);
-                    drawLine(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,lineSize);
-                    if(increment != 0)
-                    {
-                        lineSize = changeSize(lineSize, increment);
-                    }
-                    break;
-                case CURVE:
-                    drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline);
-                    drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline);
-                    break;
-                case RECTANGLE:
-                    drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec);
-                    drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentRec,drawRec);
-                    if(increment != 0)
-                    {
-                        currentRec->outline_size = changeSize(currentRec->outline_size, increment);
-                    }
-                    break;
-                case OVAL:
-                    drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentOval,drawOval);
-                    drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentOval,drawOval);
-                    break;
-                case POLYGON:
+                }
+                if(increment != 0){
+                    float scale = 5 * increment;
+                    zoom_percentage = Clamp(zoom_percentage + scale, 10, 800);  
+                }
+                camera.zoom = zoom_percentage/100;
+                handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
+                break;
+            case LINE:
+                drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize,isMouseOverCanvas);
+                drawLine(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,lineSize,isMouseOverCanvas);
+                if(increment != 0)
+                {
+                    lineSize = changeSize(lineSize, increment);
+                }
+                break;
+            case CURVE:
+                drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline,isMouseOverCanvas);
+                drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline,isMouseOverCanvas);
+                break;
+            case RECTANGLE:
+                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec,isMouseOverCanvas);
+                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentRec,drawRec,isMouseOverCanvas);
+                if(increment != 0)
+                {
+                    currentRec->outline_size = changeSize(currentRec->outline_size, increment);
+                }
+                break;
+            case OVAL:
+                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentOval,drawOval,isMouseOverCanvas);
+                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentOval,drawOval,isMouseOverCanvas);
+                break;
+            case POLYGON:
+                if(isMouseOverCanvas){
                     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                        drawPolygon(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,currentPoly);
+                        drawPolygon(&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,currentPoly);
                     }
-                    break;
-                default:
-                    break;
-            }
+                    else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
+                    {
+                        drawPolygon(&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,currentPoly);
+                    }
+                }
+                break;
+            default:
+                break;
         }
 
         BeginDrawing();
@@ -1247,12 +1350,9 @@ int main(void)
             DrawRectangleRec(resizeVerticallySquare,DARKBLUE);
 
         EndMode2D();
-
-
-
         
-        DrawRectangle(0, 30, GetScreenWidth(), 90, MENU_GRAY);
-        DrawRectangle(0,120,100,GetScreenHeight(), MENU_GRAY);
+        DrawRectangleRec(menuRec, MENU_GRAY);
+        DrawRectangleRec(menuRec2, MENU_GRAY);
         DrawLine(100, 120, GetScreenWidth(), 120, LIGHTGRAY);
         DrawLine(100, 120, 100, GetScreenHeight(), LIGHTGRAY);
         DrawRectangle(0,0,GetScreenWidth(),30,LIGHTGRAY);
@@ -1274,6 +1374,13 @@ int main(void)
             char str[10];
             sprintf(str, "#%d#",iconCodes[i]);
             if(GuiButton(toolSquares[i],str)){
+                if(currentTool == POLYGON && i != POLYGON){
+                    // RESETS POLYGON TO THE INITIAL STATE WHERE IT HAS NO VERTICES AND ERASES ANY EDGE THAT WAS DRAWN IN THE PREVIEW.
+                    BeginTextureMode(preview);
+                    ClearBackground(BLANK);
+                    EndTextureMode();
+                    createNewVertices(currentPoly);
+                }
                 currentTool = i;
                 currentToolPtr = tools[i];
             } 
@@ -1282,14 +1389,14 @@ int main(void)
         GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
         if (GuiLabelButton((Rectangle){10,0,50,30}, "File"));
 
-        DrawRectangle(0,GetScreenHeight() - 20,GetScreenWidth(),20,LIGHTGRAY);
+        DrawRectangleRec(footerRec,LIGHTGRAY);
         DrawLine(0,GetScreenHeight() - 20,GetScreenWidth(),GetScreenHeight() - 20, DARKGRAY);
         GuiLabel((Rectangle){10,GetScreenHeight() - 15,10,10},TextFormat("#%d#",ICON_CURSOR_POINTER));
-        DrawTextEx(GetFontDefault(), TextFormat("%d, %d px",(int)mouseInCanvas.x,(int)mouseInCanvas.y),(Vector2){40,GetScreenHeight() - 15},10, 2,DARKGRAY);
-
+        if(isMouseOverCanvas)
+            DrawTextEx(GetFontDefault(), TextFormat("%d, %d px",(int)mouseInCanvas.x,(int)mouseInCanvas.y),(Vector2){40,GetScreenHeight() - 15},10, 2,DARKGRAY);
 
         if (GUISettingFunctions[currentTool]){
-            GUISettingFunctions[currentTool](currentToolPtr);
+            GUISettingFunctions[currentTool](currentToolPtr, GUIRecs[currentTool]);
         }
 
         if(colorPickerOpen){
@@ -1301,7 +1408,6 @@ int main(void)
         }
 
         if(visibleWidth < canvasWidth){
-            Rectangle HorizontalScrollBar = {canvasPos.x,GetScreenHeight() - 30,GetScreenWidth() - canvasPos.x - 10,10};
             horizontalScroll = GuiScrollBar(HorizontalScrollBar,horizontalScroll,0,horizontalScrollMax);
             camera.target.x = horizontalScroll;
         }
@@ -1310,7 +1416,6 @@ int main(void)
         }
 
         if(visibleHeight < canvasHeight){
-            Rectangle VerticalScrollBar = {GetScreenWidth() - 10, canvasPos.y,10,GetScreenHeight()-canvasPos.y-30};
             verticalScroll = GuiScrollBar(VerticalScrollBar,verticalScroll,0,verticalScrollMax);
             camera.target.y = verticalScroll;
         }
@@ -1319,7 +1424,7 @@ int main(void)
         }
 
         EndDrawing();
-        //printf("%d\n",GetFPS());
+        printf("%d\n",GetFPS());
         
 
     }
