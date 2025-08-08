@@ -16,7 +16,9 @@
 
 #define MENU_GRAY (Color){225,225,225,255}
 
+bool textSpinnerEditMode = false;
 
+Rectangle spinnerRec;
 
 // ENUMS
 
@@ -367,6 +369,52 @@ void drawRec(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color 
 
 }
 
+void drawEllipseOutline(int centerX, int centerY, float radiusH, float radiusV, float thickness, Color color, int segments)
+{
+    if (radiusH <= 0 || radiusV <= 0 || thickness <= 0 || segments < 3) return;
+
+    float innerRadiusH = radiusH - thickness;
+    float innerRadiusV = radiusV - thickness;
+    if (innerRadiusH < 0) innerRadiusH = 0;
+    if (innerRadiusV < 0) innerRadiusV = 0;
+    float angleStep = 2 * PI / segments;
+
+    for (int i = 0; i < segments; i++)
+    {
+        float angle0 = i * angleStep;
+        float angle1 = (i + 1) * angleStep;
+
+        // Outer ring points
+        Vector2 p1 = {
+            centerX + cosf(angle0) * radiusH,
+            centerY + sinf(angle0) * radiusV
+        };
+        Vector2 p2 = {
+            centerX + cosf(angle1) * radiusH,
+            centerY + sinf(angle1) * radiusV
+        };
+
+        // Inner ring points
+        Vector2 p3 = {
+            centerX + cosf(angle1) * innerRadiusH,
+            centerY + sinf(angle1) * innerRadiusV
+        };
+        Vector2 p4 = {
+            centerX + cosf(angle0) * innerRadiusH,
+            centerY + sinf(angle0) * innerRadiusV
+        };
+
+        printf("x1=%0.2f,y=%0.2f\n",p1.x,p1.y);
+        printf("x2=%0.2f,y=%0.2f\n",p2.x,p2.y);
+        printf("x3=%0.2f,y=%0.2f\n",p3.x,p3.y);
+        printf("x4=%0.2f,y=%0.2f\n",p4.x,p4.y);
+
+        // Two triangles forming a quad
+        DrawTriangle(p3, p2, p1, color);
+        DrawTriangle(p1, p4, p3, color);
+    }
+}
+
 void drawOval(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color outline_color, Shape ovalInfo)
 {
     Vector2 topleft = getTopLeft(lastMouse,mouseInCanvas);
@@ -375,10 +423,12 @@ void drawOval(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color
     int centerX = topleft.x + radiusH;
     int centerY = topleft.y + radiusV;
 
-    if(ovalInfo.has_outline)
-        DrawEllipseLines(centerX,centerY,radiusH,radiusV,outline_color);
+
     if(ovalInfo.is_filled)
         DrawEllipse(centerX,centerY,radiusH,radiusV,fill_color);
+    if(ovalInfo.has_outline){
+        drawEllipseOutline(centerX,centerY,radiusH,radiusV,ovalInfo.outline_size,outline_color,32);
+    }
                     
 }
 
@@ -837,7 +887,8 @@ void textSettingsGUI(void *tool, Rectangle GUIRec)
     Text *text = (Text *)tool;
     DrawRectangleRec(GUIRec,MENU_GRAY);
     DrawRectangleLinesEx(GUIRec,1,GRAY);
-    GuiSpinner((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 150, 20}, "Font Size ",&text->font_size,5,1000,false);
+    GuiSpinner(spinnerRec, "Font Size ",&text->font_size,5,1000,textSpinnerEditMode);
+    //GuiSpinner((Rectangle){ GetScreenWidth() - 180,GetScreenHeight() - 60, 150, 20}, "Font Size ",&text->font_size,5,1000,textSpinnerEditMode);
 }
 
 void shapeSettingsGUI(void *tool, Rectangle GUIRec){
@@ -1100,7 +1151,6 @@ int main(void)
         };
 
         currentGesture = GetGestureDetected();     
-        // printf("%d\n",currentBrush->size);
         Vector2 mouse = GetMousePosition();
         Vector2 mouseInCanvas = GetScreenToWorld2D(GetMousePosition(), camera);
 
@@ -1259,6 +1309,9 @@ int main(void)
                             currentText->pos = mouseInCanvas;
                         }
                         else{
+                            BeginTextureMode(preview);
+                                ClearBackground(BLANK);  
+                            EndTextureMode();
                             DrawTextToScreen(&canvas,currentText,primaryColor);
                             createNewTextBuffer(currentText);       
                         }
@@ -1268,6 +1321,13 @@ int main(void)
                 {
                     UpdateText(currentText);
                     DrawTextToScreen(&preview,currentText,primaryColor);
+                }
+                spinnerRec = (Rectangle){GetScreenWidth() - 180,GetScreenHeight() - 60, 150, 20};
+                if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
+                    if(!textSpinnerEditMode && CheckCollisionPointRec(mouse,spinnerRec))
+                        textSpinnerEditMode = true;
+                    else if(textSpinnerEditMode)
+                        textSpinnerEditMode = false;
                 }
                 break;
             case MAGNIFIER:
@@ -1356,7 +1416,6 @@ int main(void)
         DrawLine(100, 120, GetScreenWidth(), 120, LIGHTGRAY);
         DrawLine(100, 120, 100, GetScreenHeight(), LIGHTGRAY);
         DrawRectangle(0,0,GetScreenWidth(),30,LIGHTGRAY);
-        //DrawRectangle(0,GetScreenHeight() - 10,GetScreenWidth(),10,Fade(LIGHTGRAY, 0.3f));
             
         DrawRectangleRec(secondaryColorSquare,secondaryColor);
         DrawRectangleLinesEx(secondaryColorSquare,1,BLACK);
