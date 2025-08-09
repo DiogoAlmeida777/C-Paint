@@ -2,7 +2,7 @@
 #define RAYGUI_IMPLEMENTATION
 #define RAYGUI_SUPPORT_ICONS
 #include "include/raygui.h"
-// #include "stack.h"
+#include "doublylinkedlist.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -403,12 +403,6 @@ void drawEllipseOutline(int centerX, int centerY, float radiusH, float radiusV, 
             centerX + cosf(angle0) * innerRadiusH,
             centerY + sinf(angle0) * innerRadiusV
         };
-
-        printf("x1=%0.2f,y=%0.2f\n",p1.x,p1.y);
-        printf("x2=%0.2f,y=%0.2f\n",p2.x,p2.y);
-        printf("x3=%0.2f,y=%0.2f\n",p3.x,p3.y);
-        printf("x4=%0.2f,y=%0.2f\n",p4.x,p4.y);
-
         // Two triangles forming a quad
         DrawTriangle(p3, p2, p1, color);
         DrawTriangle(p1, p4, p3, color);
@@ -432,7 +426,7 @@ void drawOval(Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color
                     
 }
 
-void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color outline_color,Shape shapeInfo, drawFunc draw_func, bool isMouseOverCanvas){
+void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color fill_color, Color outline_color,Shape shapeInfo, drawFunc draw_func, bool isMouseOverCanvas, DoublyLinkedList *history){
     if(IsMouseButtonPressed(mouse_button) && isMouseOverCanvas)
     {
         *lastMouse = *mouseInCanvas;
@@ -458,13 +452,14 @@ void drawShape(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D
             draw_func(lastMouse,mouseInCanvas,fill_color,outline_color,shapeInfo);
         }
         EndTextureMode();
+        add_node(history,canvas->texture);
         lastMouse->x = -1;
         lastMouse->y = -1;
     }
 
 }
 
-void drawLine(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color color,int lineSize, bool isMouseOverCanvas){
+void drawLine(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color color,int lineSize, bool isMouseOverCanvas, DoublyLinkedList *history){
     if(IsMouseButtonPressed(mouse_button) && isMouseOverCanvas)
     {
         *lastMouse = *mouseInCanvas;
@@ -488,6 +483,7 @@ void drawLine(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D 
         DrawLineEx(*lastMouse,*mouseInCanvas,lineSize,color);
         DrawCircle(mouseInCanvas->x,mouseInCanvas->y,lineSize/2,color);
         EndTextureMode();
+        add_node(history,canvas->texture);
         lastMouse->x = -1;
         lastMouse->y = -1;
         
@@ -509,7 +505,7 @@ void setAndDrawSplinePoints(Spline *spline,RenderTexture2D *preview,Vector2 *mou
     EndTextureMode();
 }
 
-void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview,Vector2 *lastMouse,Vector2 *mouseInCanvas,Color color,Spline *spline,bool isMouseOverCanvas){
+void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2D *preview,Vector2 *lastMouse,Vector2 *mouseInCanvas,Color color,Spline *spline,bool isMouseOverCanvas, DoublyLinkedList *history){
     if(IsMouseButtonPressed(mouse_button) && isMouseOverCanvas){
         if(spline->state == IDLE){
             spline->points[1] = (Vector2){mouseInCanvas->x,mouseInCanvas->y};
@@ -553,6 +549,7 @@ void drawSpline(MouseButton mouse_button,RenderTexture2D *canvas, RenderTexture2
                 EndTextureMode();
                 spline->state = IDLE; 
                 spline->index = 0;
+                add_node(history,canvas->texture);
             }
             else{
                 BeginTextureMode(*preview);
@@ -611,7 +608,7 @@ void fillPolygon(Polygon *poly, Color fill_color) {
     }
 }
 
-void drawPolygon(RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color outline_color, Color fill_color,Polygon *poly){
+void drawPolygon(RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *lastMouse, Vector2 *mouseInCanvas,Color outline_color, Color fill_color,Polygon *poly,DoublyLinkedList *history){
     
     if(poly->num_of_vertices > 2){
         float dist = distanceBetweenVectors(poly->vertices[0],*mouseInCanvas);
@@ -637,6 +634,7 @@ void drawPolygon(RenderTexture2D *canvas, RenderTexture2D *preview, Vector2 *las
             }
             EndTextureMode();
             createNewVertices(poly);
+            add_node(history,canvas->texture);
             lastMouse->x = -1;
             lastMouse->y = -1;
             return;
@@ -1011,6 +1009,9 @@ int main(void)
         toolSquares[i].width = toolSquares[i].height = 30;
     }
 
+    Rectangle Undo ={500,50,30,30};
+    Rectangle Redo = {550,50,30,30};
+
     RenderTexture2D canvas = LoadRenderTexture(canvasWidth,canvasHeight);
     RenderTexture2D preview = LoadRenderTexture(canvasWidth,canvasHeight);
     Vector2 canvasPos = {
@@ -1117,6 +1118,9 @@ int main(void)
 
 
     void *currentToolPtr = currentBrush;
+
+    DoublyLinkedList *history = doublylinkedlist();
+    add_node(history,canvas.texture);
 
     while (!WindowShouldClose())
     {
@@ -1239,6 +1243,9 @@ int main(void)
                         paint(&canvas,&mouseInCanvas,&lastMouse,currentBrush,secondaryColor);
                     }
                     else{
+                        if(IsMouseButtonReleased(MOUSE_RIGHT_BUTTON) || IsMouseButtonReleased(MOUSE_LEFT_BUTTON)){
+                            add_node(history,canvas.texture);
+                        }
                         lastMouse.x = -1;
                         lastMouse.y = -1;
                     }
@@ -1255,6 +1262,9 @@ int main(void)
                         paint(&canvas,&mouseInCanvas,&lastMouse,currentEraser,backgroundColor);
                     }
                     else{
+                        if(IsMouseButtonReleased(MOUSE_RIGHT_BUTTON) || IsMouseButtonReleased(MOUSE_LEFT_BUTTON)){
+                            add_node(history,canvas.texture);
+                        }
                         lastMouse.x = -1;
                         lastMouse.y = -1;
                     }
@@ -1265,11 +1275,15 @@ int main(void)
                 }
                 break;
             case COLOR_BUCKET:
-                if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
-                    fill(&canvas,mouseInCanvas,primaryColor);
-                }
-                else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
-                    fill(&canvas,mouseInCanvas,secondaryColor);
+                if(isMouseOverCanvas){
+                    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
+                        fill(&canvas,mouseInCanvas,primaryColor);
+                        add_node(history,canvas.texture);
+                    }
+                    else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)){
+                        fill(&canvas,mouseInCanvas,secondaryColor);
+                        add_node(history,canvas.texture);
+                    }
                 }
                 break;
             case COLOR_PICKER:
@@ -1294,6 +1308,9 @@ int main(void)
                     if (IsMouseButtonDown(MOUSE_RIGHT_BUTTON)) {
                         DrawAirbrush(&canvas, mouseInCanvas, secondaryColor,currentAirBrush->radius,currentAirBrush->spray_rate,&dotAccumulator); // radius 20, density 100
                     }
+                    if(IsMouseButtonReleased(MOUSE_RIGHT_BUTTON) || IsMouseButtonReleased(MOUSE_LEFT_BUTTON)){
+                            add_node(history,canvas.texture);
+                    }
                 }
                 if(increment != 0)
                 {
@@ -1313,7 +1330,8 @@ int main(void)
                                 ClearBackground(BLANK);  
                             EndTextureMode();
                             DrawTextToScreen(&canvas,currentText,primaryColor);
-                            createNewTextBuffer(currentText);       
+                            createNewTextBuffer(currentText);   
+                            add_node(history,canvas.texture);   
                         }
                     }
                 }
@@ -1354,37 +1372,37 @@ int main(void)
                 handleResizeSquaresZoom(&resizeSquare,&resizeHorizontallySquare,&resizeVerticallySquare,camera.zoom);
                 break;
             case LINE:
-                drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize,isMouseOverCanvas);
-                drawLine(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,lineSize,isMouseOverCanvas);
+                drawLine(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,lineSize,isMouseOverCanvas,history);
+                drawLine(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,lineSize,isMouseOverCanvas,history);
                 if(increment != 0)
                 {
                     lineSize = changeSize(lineSize, increment);
                 }
                 break;
             case CURVE:
-                drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline,isMouseOverCanvas);
-                drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline,isMouseOverCanvas);
+                drawSpline(MOUSE_BUTTON_LEFT,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,currentSpline,isMouseOverCanvas,history);
+                drawSpline(MOUSE_BUTTON_RIGHT,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,currentSpline,isMouseOverCanvas,history);
                 break;
             case RECTANGLE:
-                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec,isMouseOverCanvas);
-                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentRec,drawRec,isMouseOverCanvas);
+                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentRec,drawRec,isMouseOverCanvas,history);
+                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentRec,drawRec,isMouseOverCanvas,history);
                 if(increment != 0)
                 {
                     currentRec->outline_size = changeSize(currentRec->outline_size, increment);
                 }
                 break;
             case OVAL:
-                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentOval,drawOval,isMouseOverCanvas);
-                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentOval,drawOval,isMouseOverCanvas);
+                drawShape(MOUSE_LEFT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,*currentOval,drawOval,isMouseOverCanvas,history);
+                drawShape(MOUSE_RIGHT_BUTTON,&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,*currentOval,drawOval,isMouseOverCanvas,history);
                 break;
             case POLYGON:
                 if(isMouseOverCanvas){
                     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-                        drawPolygon(&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,currentPoly);
+                        drawPolygon(&canvas,&preview,&lastMouse,&mouseInCanvas,primaryColor,secondaryColor,currentPoly,history);
                     }
                     else if(IsMouseButtonPressed(MOUSE_RIGHT_BUTTON))
                     {
-                        drawPolygon(&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,currentPoly);
+                        drawPolygon(&canvas,&preview,&lastMouse,&mouseInCanvas,secondaryColor,primaryColor,currentPoly,history);
                     }
                 }
                 break;
@@ -1458,6 +1476,36 @@ int main(void)
             GUISettingFunctions[currentTool](currentToolPtr, GUIRecs[currentTool]);
         }
 
+        //UNDO
+        if(GuiButton(Undo,TextFormat("#%d#",ICON_UNDO))){
+            previous_node(history);
+
+            BeginTextureMode(canvas);
+                ClearBackground(backgroundColor);
+                DrawTextureRec(
+                    history->current->value,
+                    (Rectangle){0,0,history->current->value.width,-history->current->value.height},
+                    (Vector2){0,0},
+                    WHITE
+                );
+            EndTextureMode();
+        }
+
+        //REDO
+        if(GuiButton(Redo,TextFormat("#%d#",ICON_REDO))){
+            next_node(history);
+
+            BeginTextureMode(canvas);
+                ClearBackground(backgroundColor);
+                DrawTextureRec(
+                    history->current->value,
+                    (Rectangle){0,0,history->current->value.width,-history->current->value.height},
+                    (Vector2){0,0},
+                    WHITE
+                );
+            EndTextureMode();
+        }
+
         if(colorPickerOpen){
             if(GuiWindowBox((Rectangle){GetScreenWidth()/2 - 150,GetScreenHeight()/2 - 150,300,300},"Change Color")){
                 colorPickerOpen = false;
@@ -1483,7 +1531,7 @@ int main(void)
         }
 
         EndDrawing();
-        printf("%d\n",GetFPS());
+        //printf("%d\n",GetFPS());
         
 
     }
@@ -1495,6 +1543,7 @@ int main(void)
     freeShape(currentOval);
     freePolygon(currentPoly);
     freeSpline(currentSpline);
+    free_list(history);
     UnloadRenderTexture(canvas);
     UnloadRenderTexture(preview);
     CloseWindow();

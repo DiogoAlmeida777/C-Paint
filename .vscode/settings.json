@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "functional": "c"
+        "functional": "c",
+        "type_traits": "c",
+        "raylib.h": "c",
+        "stdio.h": "c"
     }
 }
