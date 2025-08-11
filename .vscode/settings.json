@@ -3,6 +3,7 @@
         "functional": "c",
         "type_traits": "c",
         "raylib.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "doublylinkedlist.h": "c"
     }
 }

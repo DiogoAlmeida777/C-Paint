@@ -7,12 +7,12 @@
 #include <stdlib.h>
 #include <math.h>
 #include "include/raymath.h"
+#include "OS_paths.h"
 
 #define MAX_COLORS_COUNT 42
 #define MAX_TOOLS_COUNT 12
 #define MAX_BRUSH_MODES_COUNT 2
 #define RESIZE_SQUARE_SIDE_SIZE 5
-
 
 #define MENU_GRAY (Color){225,225,225,255}
 
@@ -47,6 +47,12 @@ typedef enum{
     MAKING_LINE,
     BENDING
 } SplineState;
+
+typedef enum{
+    PNG = 0,
+    JPEG = 1,
+    BMP = 2
+} Format;
 
 // STRUCTS
 
@@ -961,6 +967,44 @@ void handleResizeSquaresZoom(Rectangle *resizeSquare, Rectangle *resizeHSquare, 
 }
 
 
+void savingImage(RenderTexture2D *canvas,char *path, char* filename, Format fileformat){
+
+    if(!DirectoryExists(path)){
+        printf("Path doesn't exist");
+        return;
+    }
+
+    const char *extension = "";
+    switch (fileformat)
+    {
+        case PNG:
+            extension = ".png";
+            break;
+        case JPEG:
+            extension = ".jpg";
+            break;
+        case BMP:
+            extension = ".bmp";
+        default:
+            break;
+    }
+
+    size_t fullPathLen = strlen(path) + strlen(filename) + strlen(extension) + 2;
+    char *fullPath = malloc(fullPathLen);
+    sprintf(fullPath,"%s%c%s%s",path,PATH_SEPARATOR,filename,extension);
+    if (!fullPath) {
+        printf("Failed at allocating memory for full Path string\n");
+        return;
+    }
+    Image image = LoadImageFromTexture(canvas->texture);
+    ImageFlipVertical(&image);   
+    if(!ExportImage(image,fullPath)){
+        printf("Failed to save image!\n");
+    }
+    UnloadImage(image);
+    free(fullPath);
+}
+
 //MAIN
 
 int main(void)
@@ -974,6 +1018,16 @@ int main(void)
     InitWindow(screenWidth, screenHeight, "C-Paint");
     SetWindowState(FLAG_WINDOW_RESIZABLE);
     SetWindowMinSize(460,460);
+
+    char *saving_path = malloc(1024);
+    strcpy(saving_path, get_pictures_path());
+    char *image_name = malloc(1024);
+    int file_format = 0;
+
+    sprintf(image_name,"untitled");
+
+    bool writing_path = false;
+    bool writing_name = false;
     
     Color colors[MAX_COLORS_COUNT] = {
         BLACK, DARKGRAY, GRAY, MAROON, RED, ORANGE, GOLD, YELLOW, GREEN, LIME, DARKGREEN, SKYBLUE, BLUE, DARKBLUE,
@@ -1041,6 +1095,8 @@ int main(void)
 
     bool colorPickerOpen = false;
 
+    bool saving = false;
+
     // TOOLS
     Brush *currentBrush = brush(5,ROUND);
     Brush *currentEraser = brush(5,SQUARE);
@@ -1063,6 +1119,7 @@ int main(void)
     int currentGesture = GESTURE_NONE;
 
     bool isMouseOverCanvas = false;
+
 
     bool resizingCanvas = false;
     bool resizingWidth = false;
@@ -1168,6 +1225,7 @@ int main(void)
             && !CheckCollisionPointRec(mouse,GUIRecs[currentTool])
             && !colorPickerOpen 
             && !resizingCanvas
+            && !saving
         )
             isMouseOverCanvas = true;
         else
@@ -1464,7 +1522,9 @@ int main(void)
         }
 
         GuiSetStyle(DEFAULT, TEXT_SIZE, 10);
-        if (GuiLabelButton((Rectangle){10,0,50,30}, "File"));
+        if (GuiLabelButton((Rectangle){10,0,50,30}, "Save")){
+            saving = true;
+        };
 
         DrawRectangleRec(footerRec,LIGHTGRAY);
         DrawLine(0,GetScreenHeight() - 20,GetScreenWidth(),GetScreenHeight() - 20, DARKGRAY);
@@ -1506,6 +1566,44 @@ int main(void)
             EndTextureMode();
         }
 
+        if(saving){
+            Rectangle windowBox = {GetScreenWidth()/2 - 250,GetScreenHeight()/2 - 125,500,250};
+            if(GuiWindowBox(windowBox,"Save As")){
+                saving = false;
+            };
+            Rectangle pathTextBox = {windowBox.x + 80,windowBox.y + 50,390,30};
+            Rectangle nameTextBox = {windowBox.x + 80,windowBox.y + 100,390,30};
+
+            if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+                if(CheckCollisionPointRec(mouse,pathTextBox)){
+                    writing_path = true;
+                    writing_name = false;
+                }
+                else if(CheckCollisionPointRec(mouse,nameTextBox)){
+                    writing_name = true;
+                    writing_path = false;
+                }
+                else{
+                    writing_name = false;
+                    writing_path = false;
+                }
+            }
+            DrawText("Path: ",windowBox.x+20,windowBox.y+60,20,GRAY);
+            GuiTextBox(pathTextBox,saving_path,1023,writing_path);
+            DrawText("Name: ",windowBox.x+20,windowBox.y+110,20,GRAY);
+            GuiTextBox(nameTextBox,image_name,1023,writing_name);
+            DrawText("File Format: ",windowBox.x+20,windowBox.y+160,20,GRAY);
+            Rectangle fileFormatToggle = {windowBox.x + 150,windowBox.y+150,60,30};
+            GuiToggleGroup(fileFormatToggle,".PNG;.JPEG;.BMP",&file_format);
+            Rectangle saveButton = {windowBox.x + windowBox.width/2 - 50,windowBox.y+windowBox.height - 40,100,30};
+            if(GuiButton(saveButton,"SAVE")){
+                printf("%d",file_format);
+                savingImage(&canvas,saving_path,image_name,file_format);
+                saving = false;
+            };
+
+        }
+
         if(colorPickerOpen){
             if(GuiWindowBox((Rectangle){GetScreenWidth()/2 - 150,GetScreenHeight()/2 - 150,300,300},"Change Color")){
                 colorPickerOpen = false;
@@ -1535,6 +1633,7 @@ int main(void)
         
 
     }
+
     freeBrush(currentBrush);
     freeBrush(currentEraser);
     freeAirBrush(currentAirBrush);
@@ -1546,6 +1645,8 @@ int main(void)
     free_list(history);
     UnloadRenderTexture(canvas);
     UnloadRenderTexture(preview);
+    free(saving_path);
+    free(image_name);
     CloseWindow();
 
     return 0;
